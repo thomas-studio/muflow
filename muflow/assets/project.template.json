@@ -1,0 +1,63 @@
+{
+  "schema_version": 2,
+  "project_id": "new-drama",
+  "version": "v1",
+  "source_path": "source.json",
+  "settings": {
+    "medium": null,
+    "quality": null,
+    "scene_ratio": "16:9",
+    "video_ratio": null,
+    "group_target_seconds": 30,
+    "speech_chars_per_second": 4.5,
+    "onscreen_text": false,
+    "subtitles": false,
+    "background_music": false,
+    "ambient_bed": false,
+    "asset_ratio": "16:9",
+    "episode_duration_mode": "story_driven",
+    "action_seconds_per_beat": 2.2,
+    "asset_review_mode": null
+  },
+  "episodes": [],
+  "scenes": [],
+  "dialogues": [],
+  "assets": [],
+  "groups": [],
+  "entities": {},
+  "iterations": [],
+  "adaptation_review": {
+    "status": "待复核",
+    "evidence": null
+  },
+  "input_assets": [],
+  "deliverables": {
+    "screenplay": null,
+    "asset_table": null,
+    "asset_prompts": null,
+    "storyboard": null,
+    "shot_prompts": null,
+    "selfcheck": null
+  },
+  "workflow": {
+    "mode": "staged_user_review",
+    "project_confirmation": {
+      "status": "pending"
+    },
+    "text_approval": {
+      "status": "pending"
+    },
+    "image_approval": {
+      "status": "pending"
+    },
+    "video_approval": {
+      "status": "pending"
+    }
+  },
+  "episode_baseline": {
+    "confirmed": false,
+    "episode_ids": [],
+    "source_sha256": null,
+    "evidence": null
+  }
+}

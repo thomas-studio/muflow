@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "setup": {
+    "status": "unpaired",
+    "pair_on_install": true,
+    "profile_location": "使用者本机配置目录，置于技能文件夹之外"
+  },
+  "authorization": {
+    "execution_enabled": false,
+    "scopes": [],
+    "budget_yuan": null,
+    "evidence": null,
+    "mode": null,
+    "project_scope": {
+      "project_id": null,
+      "episodes": [],
+      "snapshot_digest": null
+    },
+    "allow_content_redo": false
+  }
+}

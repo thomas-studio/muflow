@@ -1,0 +1,34 @@
+# Local runtime and caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+secrets.env
+secrets*.json
+profile.json
+profile.input.json
+profile_*.json
+*.pem
+*.key
+
+# Never commit production data or authorization proofs
+production.sqlite*
+stage_queue.json
+project.json
+source.json
+change-proof*.json
+change-request*.json
+*-change-proof.json
+*-change-request.json
+99_工作区/
+output/
+*.mp4
+*.mov
+*.srt
+*.zip
+.DS_Store
+Thumbs.db

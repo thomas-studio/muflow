@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "algorithm": "pbkdf2-sha256",
+  "iterations": 210000,
+  "salt": "3fdc447c0d9c140d28381860d0ec3e62959a75efdd943b61",
+  "verifier": "50cf466280b41bd1e97bfeae017f1482f66f31839eff4d0ec573476a42d06376"
+}

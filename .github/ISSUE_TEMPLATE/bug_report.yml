@@ -1,0 +1,28 @@
+name: 问题反馈
+description: 反馈可复现的问题，请先删除凭据与私人作品内容
+body:
+  - type: input
+    id: version
+    attributes:
+      label: MuFlow版本与智能体客户端
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: 出错阶段
+      options:
+        - 剧本
+        - 分镜与资产表
+        - 资产生图
+        - 审核与修图
+        - 跑前预览
+        - 视频生成与恢复
+        - 其他
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤、预期与实际结果
+      description: 请勿上传API密钥、OSS签名链接、未获许可的完整小说或私人聊天。
+    validations:
+      required: true

@@ -1,0 +1,51 @@
+{
+  "version": "2.3.0",
+  "client_date": "2026-10-22",
+  "status": "通过",
+  "unittest_discovery": {
+    "executed": true,
+    "tests_run": 197,
+    "failures": 0,
+    "errors": 0
+  },
+  "legacy_offline": {
+    "executed": true,
+    "tests_run": 11,
+    "failures": 0,
+    "errors": 0
+  },
+  "total_tests": 208,
+  "api_calls_to_live_providers": 0,
+  "scope": "原创合成项目、本地文件与127.0.0.1模拟服务；程序测试不代表剧本语义/真实图片或视频质量验收。",
+  "official_skill_validator": "通过",
+  "markdown_link_check": {
+    "checked": 44,
+    "broken": 0
+  },
+  "built_in_prop": "实际PNG/hash/绑定/reuse零请求通过",
+  "not_tested": [
+    "真实WorkBuddy新版本完整端到端执行",
+    "真实上游API/图片编辑/OSS上传与收费",
+    "本次技能升级后的真实图像与影片效果",
+    "独立新用户完整前向实测：子任务未完成，不列通过"
+  ],
+  "independent_review": {
+    "status": "部分完成",
+    "observed_and_fixed": [
+      "多资产反馈汇总不可哈希异常",
+      "用户退回母图继续派生",
+      "文字预览另建入口",
+      "人工模式误列未选AI审核为待复核"
+    ],
+    "followup": "对应实际回归测试通过；不推断真实宿主的工具选择已被技术封禁"
+  },
+  "distribution_name": "muflow",
+  "rename_validation": {
+    "date": "2026-10-22",
+    "full_tests": 197,
+    "legacy_tests": 11,
+    "passed": true,
+    "official_skill_validator": "通过",
+    "real_media_calls": 0
+  }
+}
