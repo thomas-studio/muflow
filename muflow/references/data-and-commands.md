@@ -1,4 +1,4 @@
-# 数据与命令 · schema 2 / V2.3.0
+# 数据与命令 · schema 2 / V2.3.1
 
 作品与本机配对配置分别保存。使用项目要求和已确认参数，不继承旧作品的时长、车型或改词。源稿、执行稿、请求、采用图、退回图和每次回执分版本保留。
 
@@ -76,6 +76,6 @@ image_api原始结果移到99_工作区/生图原始记录，自动登记并导�
 普通展示刷新、审查登记及同对象引用更新不改变图片内容批准；实际变更只使相应内容及依赖待复核。固定入口刷新不意味着用户已看过新版视频预览，最终启动仍绑定实际交付的完整快照和之后真实用户消息。阶段内批次与台账见[分阶段执行](staged-review.md)，不能把批次当作阶段或创建系统自动化。
 
 
-本版新增init_project.py DIRECTORY SOURCE [--project-id]提取原文与模板并立即建立双入口；已有项目用refresh_progress.py PROJECT [--profile]在每批/每次图片或审查事件后同步刷新。export_assets.py SOURCE PROJECT OUT --refresh更新固定资产表目录的资产拆解表.xlsx、资产清单源.json、生图提示词清单.md、资产图_出图任务.json，旧版归档history，均为零媒体调用。启动先完成全剧无API文字，API/OSS在全部文字交付后集中询问；配置资料不代替实际生图阶段许可。
+本版新增init_project.py DIRECTORY SOURCE [--project-id]提取原文与模板并立即建立三入口；已有项目用refresh_progress.py PROJECT [--profile]在每批/每次图片或审查事件后同步刷新。export_assets.py SOURCE PROJECT OUT --refresh更新固定资产表目录的资产拆解表.xlsx、资产清单源.json、生图提示词清单.md、资产图_出图任务.json，旧版归档history，均为零媒体调用。启动先完成全剧无API文字，API/OSS在全部文字交付后集中询问；配置资料不代替实际生图阶段许可。
 
 stage_queue.py只作本地5集剧本／5集分镜资产／20张图片分批台账。图片complete仅表示已出图；next末态先awaiting_review/asset_review，统一readiness满足实际内容、全量结构、技术与所选审核后才ready_preview/prevideo_preview，未取得必需人工结论不能满血。台账不产生生图或视频授权，最终完整当前预览实际交付后仍等明确人工启动。

@@ -1,10 +1,11 @@
 {
-  "version": "2.3.0",
+  "version": "2.3.1",
+  "distribution_name": "muflow",
   "client_date": "2026-10-22",
   "status": "通过",
   "unittest_discovery": {
     "executed": true,
-    "tests_run": 197,
+    "tests_run": 211,
     "failures": 0,
     "errors": 0
   },
@@ -14,38 +15,31 @@
     "failures": 0,
     "errors": 0
   },
-  "total_tests": 208,
+  "total_tests": 222,
   "api_calls_to_live_providers": 0,
-  "scope": "原创合成项目、本地文件与127.0.0.1模拟服务；程序测试不代表剧本语义/真实图片或视频质量验收。",
+  "scope": "原创合成项目、本地文件、回环HTTP服务及DOM行为；另对用户现有MP4执行本地播放器技术加载验证，未分析内容。",
   "official_skill_validator": "通过",
   "markdown_link_check": {
-    "checked": 44,
+    "checked": 45,
     "broken": 0
   },
-  "built_in_prop": "实际PNG/hash/绑定/reuse零请求通过",
-  "not_tested": [
-    "真实WorkBuddy新版本完整端到端执行",
-    "真实上游API/图片编辑/OSS上传与收费",
-    "本次技能升级后的真实图像与影片效果",
-    "独立新用户完整前向实测：子任务未完成，不列通过"
-  ],
-  "independent_review": {
-    "status": "部分完成",
-    "observed_and_fixed": [
-      "多资产反馈汇总不可哈希异常",
-      "用户退回母图继续派生",
-      "文字预览另建入口",
-      "人工模式误列未选AI审核为待复核"
-    ],
-    "followup": "对应实际回归测试通过；不推断真实宿主的工具选择已被技术封禁"
+  "preview_checks": {
+    "initial_three_files": "通过",
+    "no_html_rewrite_on_progress": "通过",
+    "player_node_time_pause_preserved": "通过",
+    "on_demand_loading": "通过",
+    "explicit_version_switch": "通过",
+    "read_only_all_batch_video_ledger": "通过",
+    "exclude_image_jobs": "通过",
+    "range_head_and_seek_transport": "通过",
+    "registered_media_only": "通过",
+    "isolated_project_view": "通过",
+    "browser_actual_mp4_ready_state": 4
   },
-  "distribution_name": "muflow",
-  "rename_validation": {
-    "date": "2026-10-22",
-    "full_tests": 197,
-    "legacy_tests": 11,
-    "passed": true,
-    "official_skill_validator": "通过",
-    "real_media_calls": 0
-  }
+  "not_tested": [
+    "真实WorkBuddy内置WebView播放器兼容",
+    "真实生成API/OSS/收费回归",
+    "真实成片内容与人工采用"
+  ],
+  "historical_baseline": "V2.3.0验证报告和历史记录保留，当前本文件为V2.3.1实际测试结果"
 }

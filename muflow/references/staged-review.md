@@ -15,7 +15,7 @@
 
 ## 固定入口与进度
 
-输入盘点后立即在项目建立03_资产图/00_资产参考图总览.html、07_跑前预览/全剧跑前预览.html，不依赖API、远端图或媒体生成。资产表完成后提供其实际交付文件链接。资产表、图册与预览持续刷新同一入口，后台保留各次真实交付快照。
+输入盘点后立即在项目建立03_资产图/00_资产参考图总览.html、07_跑前预览/全剧跑前预览.html、08_视频/已出成片预览.html，不依赖API、远端图或媒体生成。资产表完成后提供其实际交付文件链接。资产表、图册与预览持续刷新同一入口，后台保留各次真实交付快照。
 
 准备中可以交页面，但未解析、未开始、生成中、已返回待登记、待审、失败、待核实必须分清，计数与时间来自真实任务/文件/审查记录。缺记录不能猜成未开始或成功；无来源总量时写待解析。
 
@@ -33,7 +33,7 @@
 
 以下从项目所在目录运行，Python使用当前正确解释器，路径按实际项目填写。
 
-1. 新项目运行python scripts/init_project.py 项目目录 原稿文件 --project-id 项目ID，提取原文与空模板后立即刷新双入口；已有项目运行python scripts/refresh_progress.py 项目/project.json恢复刷新。两者不读取凭证、不上传、不生成，准备不全仍输出可读缺项。也可分别运行asset_gallery.py与build_preview.py；每批、每次图片/审查/请求事件后调用refresh_progress同步，外置--profile等文字完成进入生图配置阶段才提供。
+1. 新项目运行python scripts/init_project.py 项目目录 原稿文件 --project-id 项目ID，提取原文与空模板后立即刷新三入口；已有项目运行python scripts/refresh_progress.py 项目/project.json恢复刷新。两者不读取凭证、不上传、不生成，准备不全仍输出可读缺项。也可分别运行asset_gallery.py与build_preview.py；每批、每次图片/审查/请求事件后调用refresh_progress同步，外置--profile等文字完成进入生图配置阶段才提供。
 2. 完整阅读并得到设置来源后，填settings、输入图与来源范围：workflow_review.py 项目/project.json confirm-project --evidence “实际用户设置来源”。不能代造确认。
 3. 按前述批次顺序完成全剧剧本、分镜资产与两类提示词；export_assets.py 资产源JSON 项目/project.json 项目/资产表 --refresh更新资产表四件套，旧版归档history，登记deliverables六项真实文件。所有阶段先做无依赖工作，文本无需API。
 4. build_text_preview.py 项目/project.json 项目/文字审阅_v1生成文字审阅快照并同步固定跑前入口。实际交付完整文字后：workflow_review.py 项目/project.json deliver-text --preview 项目/文字审阅_v1 --evidence “真实交付依据”。

@@ -1,4 +1,4 @@
-"""Create two empty progress entrances before creative/media work; never call an API."""
+"""Create three empty progress entrances before creative/media work; never call an API."""
 import argparse,json
 from pathlib import Path
 from core import load,save

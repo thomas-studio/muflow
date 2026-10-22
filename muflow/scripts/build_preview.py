@@ -146,6 +146,9 @@ def _entry_links(data,base):
     from asset_gallery import GALLERY
     gallery = (Path(base)/'03_资产图'/GALLERY).resolve()
     links = '<a href="'+esc(gallery.as_uri())+'">资产总览</a> · '
+    from video_gallery import PANEL as VIDEO_PANEL
+    videos=(Path(base)/'08_视频'/VIDEO_PANEL).resolve()
+    links += '<a href="'+esc(videos.as_uri())+'">已出成片预览</a> · '
     table = data.get('deliverables',{}).get('asset_table')
     if table:
         try:

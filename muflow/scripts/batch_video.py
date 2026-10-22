@@ -185,6 +185,15 @@ def run(items,cfg,out,store,max_seconds=None,grant=None):
                 d.update(phase='running' if d.get('task_id') else 'uncertain',error=type(e).__name__,next_at=now+poll)
             else:d.update(phase='blocked',resume_phase=phase,error=str(e))
         store.put(jid,fp,d)
+    def publish_preview():
+        from video_gallery import build_data,read_tasks
+        base=Path(store.path).resolve().parent
+        pp=base/'project.json'
+        project=load(pp) if pp.exists() else {'project_id':base.name,'groups':[{'id':x['id'],'episode':x['episode']} for x in items]}
+        tasks=read_tasks(base)
+        try:build_data(project,base,tasks)
+        except Exception as exc:save(out/'preview_update_error.json',{'result':'待复核','error_type':type(exc).__name__,'note':'Preview update failed; preserve task and downloaded files.'})
+    last_preview=0
     pool=cf.ThreadPoolExecutor(max_workers=cap+2);futures={}
     try:
         while True:
@@ -210,11 +219,14 @@ def run(items,cfg,out,store,max_seconds=None,grant=None):
             current={k:store.get(k) for k in byid}
             tasks=[{'id':k,'episode':byid[k]['episode'],**d} for k,d in current.items()]
             save(out/'batch_summary.json',{'tasks':tasks,'reserved_cost_upper_bound_yuan':store.reserved(),'billing':store.billing(),'billing_note':'Reservations are conservative. Reported platform costs in history; unknown charges are not assumed zero.'})
+            if time.monotonic()-last_preview>=2:
+                publish_preview();last_preview=time.monotonic()
             if not futures and all(d['phase'] in ('downloaded','blocked','uncertain') for d in current.values()):break
             if not futures and any(d.get('price_exceeded') for d in current.values()) and not any(d['phase'] in ('running','poll_result','download') for d in current.values()):break
             if max_seconds is not None and time.time()-started>=max_seconds and not futures:break
             time.sleep(0.05 if video.get('test_mode') else 1)
-    finally:pool.shutdown(wait=True)
+    finally:
+        pool.shutdown(wait=True);publish_preview()
     return load(out/'batch_summary.json')
 
 if __name__=='__main__':

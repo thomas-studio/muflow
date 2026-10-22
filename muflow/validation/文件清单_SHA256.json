@@ -1,23 +1,23 @@
 {
-  "version": "2.3.0",
+  "version": "2.3.1",
   "distribution_name": "muflow",
   "date": "2026-10-22",
   "excluded_self": true,
   "files": [
     {
       "path": "00_开始测试.md",
-      "bytes": 4464,
-      "sha256": "b8d3452d0817ff197eaa5649ecdb04e4d33109f04fb75c9621a5ac84bb7dc70f"
+      "bytes": 4653,
+      "sha256": "44e344ed281a67b9a1831a567897b128356b0840a8f3ee77d92093e02c272c27"
     },
     {
       "path": "SKILL.md",
-      "bytes": 15567,
-      "sha256": "2366853f583dd836cb4e1fa68ccc2b6157438ebe9c2830ff676bc23ffcd84bc5"
+      "bytes": 16532,
+      "sha256": "63fd108e785e50dbc043eef8ded8d0a9a015da7b60351788ae2fe9c4f99d8d9d"
     },
     {
       "path": "agents/openai.yaml",
-      "bytes": 535,
-      "sha256": "84a3a2cd0df2a74e2a6562c6ddeb50f6fcfb82097fad5ad5b244d8df06cfc996"
+      "bytes": 595,
+      "sha256": "771473f65536f812e2a7b3213d3ed0e058d51d808174274d9b229630c41913f8"
     },
     {
       "path": "assets/profile.template.json",
@@ -48,6 +48,11 @@
       "path": "assets/props/cash-bag-black-v1/prompt.zh.txt",
       "bytes": 953,
       "sha256": "274caa43ec02d414c60b4d7db0b1e5da687ef7a6c827a40fcdaaf17c24c5ce35"
+    },
+    {
+      "path": "assets/video-preview.js",
+      "bytes": 6519,
+      "sha256": "321dced1816c798387a36d8158243ff5c263b08a399219326664f1ad692be261"
     },
     {
       "path": "assets/原创测试小说.txt",
@@ -87,7 +92,7 @@
     {
       "path": "references/data-and-commands.md",
       "bytes": 13281,
-      "sha256": "5158639f653d06ae2edde9dd04427408d2137e894839332b41bc3e7201080ef0"
+      "sha256": "61167ee1560657f1a221c2fd9459c7ded244983f0aff7b1b947fae72f943217b"
     },
     {
       "path": "references/media-api.md",
@@ -106,13 +111,13 @@
     },
     {
       "path": "references/staged-review.md",
-      "bytes": 11668,
-      "sha256": "777db601b7ace392c92cc058afce4298b3b38aa31156700323be604d02c262da"
+      "bytes": 11704,
+      "sha256": "a468f26a9f5a3bebf95179393d9839514e4d6d11b23df041838d56dd80571906"
     },
     {
       "path": "references/start-and-test.md",
       "bytes": 4919,
-      "sha256": "e9ae1c6bcacae51af5e92874ef4a049c531fab489d4b927451b42560b282b062"
+      "sha256": "3d9ea731eb03c33ae23bda62a996111700c68db49c4f41d4d55bd8a5ee5132b3"
     },
     {
       "path": "references/storyboard-assets.md",
@@ -123,6 +128,11 @@
       "path": "references/timing.md",
       "bytes": 4437,
       "sha256": "2e1c35ea569021859437729c13b671a608045c3335b99e1f6b81cdfb3caedb5c"
+    },
+    {
+      "path": "references/video-preview.md",
+      "bytes": 3147,
+      "sha256": "a8a83d7cd28ee6c9405a9602e71d0ebc3c9f21c7daefe11ed0872c052b410873"
     },
     {
       "path": "requirements.txt",
@@ -151,13 +161,13 @@
     },
     {
       "path": "scripts/batch_video.py",
-      "bytes": 15963,
-      "sha256": "3d4d421d5c28a5969a2bc59ded0dcacc448eb49c8848b898851dbb2b66a954ea"
+      "bytes": 16684,
+      "sha256": "59b5ec96b6ca1552e511861984a8b5bdf2840477febe913ee42e66f199f367f0"
     },
     {
       "path": "scripts/build_preview.py",
-      "bytes": 23666,
-      "sha256": "05a34f38c85ee731da1a2648065adafe4be4f30153d76a45a6be9a9dfcfda8d4"
+      "bytes": 23852,
+      "sha256": "a3085e12ff1e921d614266e7a0c3eaf230275577b4fa4b3c0473db11f7c98988"
     },
     {
       "path": "scripts/build_text_preview.py",
@@ -206,8 +216,8 @@
     },
     {
       "path": "scripts/init_project.py",
-      "bytes": 1148,
-      "sha256": "187cfc74704eaf2f4e3f5f822aef598d83a453c94e817d96c8423724d0e6dac5"
+      "bytes": 1150,
+      "sha256": "421e2c813c4ce25ec5b02bbc12b14625d1cb9effe462a93d987d13e26b741824"
     },
     {
       "path": "scripts/media_integrity.py",
@@ -221,8 +231,8 @@
     },
     {
       "path": "scripts/refresh_progress.py",
-      "bytes": 1323,
-      "sha256": "5b5aed9a10bbf78e2ad06bf896522f3ec4f8c1273ac2d2b6350ba47845f67d20"
+      "bytes": 1530,
+      "sha256": "c9fc73460cc0a9adedadda914ffa2068243d83499628d285f75629a20d7fc932"
     },
     {
       "path": "scripts/review_evidence.py",
@@ -238,6 +248,11 @@
       "path": "scripts/selfcheck_report.py",
       "bytes": 5925,
       "sha256": "97626e0039d2bfd2ab166d7eec965921d07845f6e94d84904e591f766a2b350c"
+    },
+    {
+      "path": "scripts/serve_video_preview.py",
+      "bytes": 8330,
+      "sha256": "d7a04b02a232140c4f0599456644771044cd5cc4330575d2356d5719ccbfc7f7"
     },
     {
       "path": "scripts/setup_profile.py",
@@ -278,6 +293,11 @@
       "path": "scripts/version_catalog.py",
       "bytes": 1833,
       "sha256": "ef5370dd678b6c3093e66f1cfa1b7815b26a4f7839f2078c0c64972007a26e06"
+    },
+    {
+      "path": "scripts/video_gallery.py",
+      "bytes": 8660,
+      "sha256": "9a8c04b33d926d6e6d9552e9eb6038e599c8670f6de91b24fdda19482ec177e0"
     },
     {
       "path": "scripts/workflow_gate.py",
@@ -345,6 +365,16 @@
       "sha256": "31a67f4a604015e06cb73bc8bbf4f22b8657dc77640dbed7e1aab4e13fcc154a"
     },
     {
+      "path": "tests/test_video_client.cjs",
+      "bytes": 3792,
+      "sha256": "8cc641e48ed8915829577792929c3c2a7119591ebc38678f04fc6424f4cce3ac"
+    },
+    {
+      "path": "tests/test_video_preview.py",
+      "bytes": 9354,
+      "sha256": "54b70c188a45907d60ba468af9e451cfe3dd8f450775f1d0a2b694bd7cffe605"
+    },
+    {
       "path": "validation/内置道具接入核验.json",
       "bytes": 332,
       "sha256": "4caf89850f74776e271426c07238fae4fcc7c7aececf8e470970dadaefbbd1f6"
@@ -356,13 +386,13 @@
     },
     {
       "path": "validation/打包自检报告.md",
-      "bytes": 4021,
-      "sha256": "9d9b084cbabe3ef86eae7af683e084a210b09d1d68ec50625cfcd6363e293e51"
+      "bytes": 5745,
+      "sha256": "feb8663caadc444a934486d4632da158ad9de791a6fb3ab9d13faeed4bb83dec"
     },
     {
       "path": "validation/离线验证报告.json",
-      "bytes": 1536,
-      "sha256": "e9317bdb006052b26b15fbf10ee9a07503015e70e721a8a2f2b0ca4a91a3a80a"
+      "bytes": 1407,
+      "sha256": "48d27f7e6dac9a38be2dc38f337eb73fc601263c05caa57d103577a3fa0de679"
     }
   ]
 }

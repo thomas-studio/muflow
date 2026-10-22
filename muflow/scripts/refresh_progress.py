@@ -11,6 +11,10 @@ def refresh(project_path,profile_path=None):
     except Exception as exc:out['issues'].append({'object':'asset_gallery','result':'待复核','error':str(exc)})
     try:out['preview']=preview(pp,base/'07_跑前预览',profile_path)
     except Exception as exc:out['issues'].append({'object':'run_preview','result':'待复核','error':str(exc)})
+    try:
+        from video_gallery import build as videos
+        out['videos']=videos(pp)
+    except Exception as exc:out['issues'].append({'object':'video_gallery','result':'待复核','error':str(exc)})
     p=load(pp)
     from selfcheck_report import build as report
     review_report=base/'03_资产图'/'资产审核问题汇总.md';review_report.parent.mkdir(parents=True,exist_ok=True)
