@@ -7,6 +7,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 from PIL import Image
 from core import save,load,sha,digest
 from asset_gallery import build,verify,manifest,required_ids,register_saved,GALLERY,SNAPSHOT,Cards
+from init_project import initialize
+from refresh_progress import refresh_owned
 
 class GroupedGallery(unittest.TestCase):
     def setUp(self):
@@ -129,10 +131,15 @@ class GroupedGallery(unittest.TestCase):
         self.assertEqual(first['manifest_digest'],second['manifest_digest']);self.assertNotEqual(first['built_at'],second['built_at'])
         for path,data in before.items():self.assertEqual(Path(path).read_bytes(),data)
     def test_registration_is_idempotent_preserves_old_candidate_review_and_actual_edit_audit(self):
-        self.build();old=self.asset('rain')['local_path'];old_hash=sha(old);f=self.base/'new-rain.png';Image.new('RGB',(64,36),'cyan').save(f)
+        source=self.base/'novel.txt';source.write_text('第1集\n原创离线测试。',encoding='utf-8')
+        init=initialize(self.base,source,'owned-grouped-test');self.assertEqual(init['status'],'complete',init)
+        self.p['muflow_init_v240']=load(self.pp)['muflow_init_v240'];save(self.pp,self.p)
+        refreshed=refresh_owned(self.pp);self.assertFalse(refreshed['issues'],refreshed)
+        old=self.asset('rain')['local_path'];old_hash=sha(old);f=self.base/'new-rain.png';Image.new('RGB',(64,36),'cyan').save(f)
         result={'phase':'saved','output':str(f),'sha256':sha(f),'audit':{'operation':'image_edit','input_asset_id':'mother','input_sha256':self.asset('mother')['sha256'],'input_count':1}}
-        with patch('urllib.request.urlopen',side_effect=AssertionError('No network permitted')):register_saved(self.pp,'rain',result)
-        p=load(self.pp);a=next(a for a in p['assets'] if a['id']=='rain');a['review']={'status':'通过','evidence':'实际看图后记录'};save(self.pp,p);count=len(p['iterations']);register_saved(self.pp,'rain',result);p=load(self.pp)
+        with patch('urllib.request.urlopen',side_effect=AssertionError('No network permitted')):refreshed=register_saved(self.pp,'rain',result)
+        self.assertFalse(refreshed['issues'],refreshed)
+        p=load(self.pp);a=next(a for a in p['assets'] if a['id']=='rain');a['review']={'status':'通过','evidence':'实际看图后记录'};save(self.pp,p);count=len(p['iterations']);refreshed=register_saved(self.pp,'rain',result);self.assertFalse(refreshed['issues'],refreshed);p=load(self.pp)
         self.assertEqual(len(p['iterations']),count);self.assertEqual(next(a for a in p['assets'] if a['id']=='rain')['review']['status'],'通过');self.assertEqual(sha(old),old_hash)
         self.assertTrue(any(v['sha256']==old_hash for v in p['iterations']));self.assertEqual(next(a for a in p['assets'] if a['id']=='rain')['edit_audit'],result['audit']);verify(p,self.base,self.gallery)
     def test_saved_derivative_missing_actual_mother_audit_is_rejected_before_write(self):

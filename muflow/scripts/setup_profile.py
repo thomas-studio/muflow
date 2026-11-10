@@ -30,8 +30,10 @@ def pair(config,output,replace=False):
         required(block.get('model'),section+'.model')
         price=block.get('max_price_per_attempt_yuan')
         if type(price) not in (int,float) or price<=0:problems.append(section+'.max_price_per_attempt_yuan must be the user-verified positive quote cap')
+    image=cfg.setdefault('image',{});image.setdefault('concurrency',10)
+    if image['concurrency'] is not None and (type(image['concurrency']) is not int or image['concurrency']<1):problems.append('image.concurrency must be a positive user target or null for no limit')
     vid=cfg.get('video',{})
-    for field in ('resolution','concurrency','verified_concurrency_limit','verified_max_images','verified_durations_seconds'):required(vid.get(field),'video.'+field)
+    for field in ('resolution','verified_max_images','verified_durations_seconds'):required(vid.get(field),'video.'+field)
     for operation in ('image_generate','image_edit','video'):
         c=cfg.get('contracts',{}).get(operation,{})
         if c.get('operation')!=operation:problems.append(operation+' operation mismatch')

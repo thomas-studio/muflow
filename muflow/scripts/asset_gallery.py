@@ -175,7 +175,7 @@ def _plan(m,base,out):
         hist[v['id']]=r
     return images,current,hist
 
-def build(project_path):
+def _build_unlocked(project_path):
     pp=Path(project_path);p=load(pp);base=pp.parent;out=base/'03_资产图';out.mkdir(exist_ok=True)
     m=manifest(p,base);esc=lambda v:html.escape(str(v if v is not None else ''),quote=True)
     images,current,hist=_plan(m,base,out);copies=[];history_images=[]
@@ -273,11 +273,17 @@ def verify(project,base,gallery):
     if load(f.parent/'全部迭代追溯.json')!=m['iterations'] or sha(f.parent/'全部迭代追溯.json')!=snap.get('iterations_sha256'):raise ValueError('Gallery iteration trace changed or missing')
     return snap
 
+def build(project_path):
+    from batch_video import blocking_exclusive
+    base=Path(project_path).parent
+    with blocking_exclusive(base/'.preview-refresh.lock'):
+        return _build_unlocked(project_path)
+
 def register_saved(project_path,aid,result):
     if result.get('phase')!='saved':return
-    from batch_video import exclusive
+    from batch_video import blocking_exclusive
     pp=Path(project_path);base=pp.parent
-    with exclusive(base/'.asset-registry.lock'):
+    with blocking_exclusive(base/'.asset-registry.lock'):
         p=load(pp);a=next(x for x in p['assets'] if x['id']==aid);src=Path(result['output'])
         if sha(src)!=result['sha256']:raise ValueError('Saved image changed before registration')
         audit=result.get('audit',{})
@@ -297,7 +303,12 @@ def register_saved(project_path,aid,result):
         row={'id':'image:'+aid+':'+result['sha256'][:12],'asset_id':aid,'kind':'image','label':a['name']+' · '+str(a.get('version','v1')),'version':a.get('version','v1'),
              'local_path':str(src),'sha256':result['sha256'],'status':'待复核','reason':'接口已返回，等待实际看图；未代表用户采用','parent_id':a.get('parent_id'),'prompt':a.get('prompt'),'generation_review_status':result.get('review_status') or '待复核','audit':audit}
         if not any(x.get('id')==row['id'] for x in p.setdefault('iterations',[])):p['iterations'].append(row)
-        save(pp,p);build(pp)
+        save(pp,p)
+    # The protected publisher takes the registry lock itself, so release it first.
+    from refresh_progress import refresh_owned
+    return refresh_owned(pp)
 
 if __name__=='__main__':
-    ap=argparse.ArgumentParser();ap.add_argument('project');a=ap.parse_args();print(json.dumps(build(a.project),ensure_ascii=False))
+    ap=argparse.ArgumentParser();ap.add_argument('project');a=ap.parse_args()
+    from refresh_progress import refresh_owned
+    result=refresh_owned(a.project);print(json.dumps(result,ensure_ascii=False));raise SystemExit(1 if result.get('issues') else 0)

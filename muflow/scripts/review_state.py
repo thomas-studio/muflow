@@ -11,14 +11,25 @@ def mode(p):
 
 def asset_subject(p,a):
     parents={x['id']:x for x in p.get('assets',[])}
-    return digest({k:a.get(k) for k in ('id','entity_id','state_key','mode','parent_id','prompt','sha256')}|
-                  {'parent_sha256':parents.get(a.get('parent_id'),{}).get('sha256')})
+    data={k:a.get(k) for k in ('id','entity_id','state_key','mode','parent_id','prompt','sha256')}|{
+          'parent_sha256':parents.get(a.get('parent_id'),{}).get('sha256')}
+    if a.get('kind')=='scene' and 'scene_identity' in a:data['scene_identity']=a['scene_identity']
+    return digest(data)
 
 def group_subject(p,g):
     scenes={s['id']:s for s in p.get('scenes',[])};dialogues={d['id']:d for d in p.get('dialogues',[])}
-    return digest({'id':g['id'],'shots':g.get('shots',[]),'bindings':g.get('bindings',[]),
+    data={'id':g['id'],'shots':g.get('shots',[]),'bindings':g.get('bindings',[]),
        'scenes':[scenes.get(s.get('scene_id')) for s in g.get('shots',[])],
-       'dialogues':[dialogues.get(f['id']) for s in g.get('shots',[]) for f in s.get('speech',[])]})
+       'dialogues':[dialogues.get(f['id']) for s in g.get('shots',[]) for f in s.get('speech',[])]}
+    baseline=p.get('scene_binding_baseline')
+    if isinstance(baseline,dict):
+        used={s.get('scene_id') for s in g.get('shots',[])}
+        assets={a.get('id'):a for a in p.get('assets',[])}
+        scene_assets={b.get('asset_id') for b in g.get('bindings',[]) if assets.get(b.get('asset_id'),{}).get('kind')=='scene'}
+        data['scene_binding_evidence']={'source_sha256':baseline.get('source_sha256'),'evidence':baseline.get('evidence'),
+          'scenes':[r for r in baseline.get('scenes',[]) if isinstance(r,dict) and r.get('scene_id') in used],
+          'assets':[{'id':aid,'sha256':assets[aid].get('sha256'),'identity':assets[aid].get('scene_identity')} for aid in sorted(scene_assets)]}
+    return digest(data)
 
 def _check_rows(review,expected_subject,required,shot_ids=None):
     if not isinstance(review,dict) or review.get('status')!='通过':return '审查尚未通过'

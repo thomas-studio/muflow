@@ -84,6 +84,25 @@ def upgrade(p,cfg,base):
             prev=s
     cfg['authorization'].update(mode='project_pre_authorized',project_scope={'project_id':p['project_id'],'episodes':[1,2,3,4,5]},allow_content_redo=False)
     cfg['contracts']['video']['body']['client_key']='$client_key'
+    # Explicit synthetic source evidence and image identity for the new scene contract.
+    # This is constructed before text/image approvals and all review digests.
+    src=load(base/p['source_path'])
+    by_id={x['id']:x for x in src['paragraphs']}
+    baseline_rows=[]
+    for sc in p['scenes']:
+        episode=sc['episode'];anchor=next(d['source_ids'][0] for d in p['dialogues'] if d.get('episode')==episode)
+        by_id[anchor]['text']=f"{episode}-1 储物室 内 白天\n"+by_id[anchor]['text']
+        sc.update(source_id=anchor,inout='内')
+        baseline_rows.append({'scene_id':sc['id'],'episode':episode,'scene_name':sc['name'],'source_id':anchor,
+            'location_id':'fixture_storage','space_id':'fixture_storage_room','inout':'内','time':sc['time'],
+            'allowed_scene_asset_ids':['S1'],'evidence':'Synthetic scene header explicitly inserted in source paragraph'})
+    save(base/p['source_path'],src)
+    p['scene_binding_baseline']={'source_sha256':sha(base/p['source_path']),'evidence':'Synthetic source scene headers','scenes':baseline_rows}
+    scene_asset=next(a for a in p['assets'] if a['id']=='S1')
+    scene_asset['scene_identity']={'location_id':'fixture_storage','space_id':'fixture_storage_room','inout':'内','time':'白天',
+        'evidence':'Synthetic fixture scene identity; no production image inspection'}
+    for g in p['groups']:
+        for shot in g['shots']:shot['primary_scene_asset_id']='S1'
     stage_fixture(p,base)
     sync(p,cfg,base)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse,base64,json,mimetypes,os,time,urllib.request,urllib.parse,uuid
 from pathlib import Path
 from core import *
-from batch_video import Store,exclusive,download,status
+from batch_video import Store,exclusive,blocking_exclusive,download,status
 
 def multipart(url,fields,key,timeout):
     boundary='drama-'+uuid.uuid4().hex;parts=[]
@@ -19,7 +19,17 @@ def multipart(url,fields,key,timeout):
 
 def _refresh(project_path):
     from refresh_progress import refresh
-    return refresh(project_path)
+    result=refresh(project_path)
+    if result.get('issues'):
+        try:
+            base=Path(project_path).parent;folder=base/'99_工作区';folder.mkdir(parents=True,exist_ok=True)
+            with blocking_exclusive(folder/'.image-preview-evidence.lock'):
+                with (folder/'图片任务_面板刷新记录.jsonl').open('a',encoding='utf-8') as out:
+                    out.write(json.dumps({'at':time.time(),'status':'待复核','issues':result['issues'],'media_calls':0},ensure_ascii=False)+'\n')
+        except Exception as exc:
+            import sys
+            print('图片预览失败记录未写入：'+type(exc).__name__+': '+str(exc),file=sys.stderr)
+    return result
 
 def perform(project_path,profile_path,aid,execute=False):
     pp=Path(project_path);base=pp.parent;project=load(pp);assets={a['id']:a for a in project['assets']};a=assets[aid]
@@ -27,8 +37,7 @@ def perform(project_path,profile_path,aid,execute=False):
         p=resolve(base,a['local_path'])
         if sha(p)!=a.get('sha256') or a.get('review',{}).get('status')!='通过' or not a.get('review',{}).get('evidence'):raise ValueError('Reused image requires actual hash and review')
         if project.get('schema_version')==2:
-            from refresh_progress import refresh
-            refresh(pp)
+            _refresh(pp)
         return {'operation':'reuse','phase':'saved','output':str(p),'sha256':sha(p),'external_requests':0}
     cfg=load(profile_path)
     if project.get('schema_version')!=2 and not (cfg.get('video',{}).get('test_mode') is True and urllib.parse.urlsplit(cfg.get('contracts',{}).get('image_edit' if a.get('mode')=='edit' else 'image_generate',{}).get('url','')).hostname in ('127.0.0.1','localhost','::1')):raise ValueError('Migrate project and complete staged user review before production images')
@@ -76,27 +85,49 @@ def perform(project_path,profile_path,aid,execute=False):
             if project.get('schema_version')==2:
                 from asset_gallery import register_saved
                 register_saved(pp,aid,old)
-                from refresh_progress import refresh
-                refresh(pp)
+                _refresh(pp)
             return old
         if old and old.get('phase') in ('submitting','uncertain'):raise ValueError('Previous image POST uncertain; reconcile before retry')
-        if old and old.get('phase')=='failed':raise ValueError('Create a new image asset version for retry and preserve evidence')
         price=cfg['image'].get('max_price_per_attempt_yuan')
         if not isinstance(price,(int,float)) or price<=0:raise ValueError('Image price cap required')
-        d=old or {'phase':'ready','audit':audit}
-        if not old:
-            store.reserve(sk,price,cfg['authorization']['budget_yuan']);d['phase']='submitting';store.put(sk,fp,d);_refresh(pp)
-            save(out/(safe_name(aid)+'_request_audit.json'),{'audit':audit,'body_keys':list(body),'prompt':a['prompt']})
+        d=old or {'phase':'ready','audit':audit,'attempts':0,'history':[]}
+        if not old or d.get('phase') in ('ready','retry','failed'):
+            if d.get('next_at',0)>time.time():return d
+            n=int(d.get('attempts',1 if old else 0))+1
+            attempt_key=sk+':'+str(n);store.reserve(attempt_key,price,cfg['authorization']['budget_yuan'])
+            d.setdefault('history',[]).append({'attempt':n,'reserved_yuan':price,'started':time.time()})
+            d.update(phase='submitting',attempts=n);[d.pop(k,None) for k in ('task_id','response')]
+            store.put(sk,fp,d);_refresh(pp)
+            save(out/(safe_name(aid)+f'_attempt{n}_request_audit.json'),{'audit':audit,'body_keys':list(body),'prompt':a['prompt']})
             try:resp=multipart(c['url'],body,key,c.get('timeout_seconds',240)) if c.get('encoding')=='multipart' else api_json(c['url'],c.get('method','POST'),body,key,c.get('timeout_seconds',240))
-            except Exception:
+            except Exception as e:
+                from rate_limit import rejected_429
+                rejection=rejected_429(e,c,cfg['image'].get('retry_seconds',30))
+                if rejection:
+                    receipt=out/(safe_name(aid)+f'_attempt{n}_rejected_429.json');save(receipt,rejection)
+                    d['history'][-1].update(receipt=str(receipt),last_state='rejected_429',rejection=rejection)
+                    if rejection['confirmed_no_charge']:store.release_rejected(attempt_key,str(receipt))
+                    d.update(phase='retry',next_at=time.time()+rejection['retry_after_seconds'],error='Provider confirmed HTTP 429 rejected before task creation')
+                    store.put(sk,fp,d);_refresh(pp);return d
                 d['phase']='uncertain';store.put(sk,fp,d);_refresh(pp);raise
             d['response']=resp;store.put(sk,fp,d);_refresh(pp)
         else:resp=d.get('response',{})
         started=time.time()
         while True:
+            cost=first(resp,c.get('cost_paths',[]));refund=first(resp,c.get('refund_paths',[]))
+            if cost is not None or refund is not None:
+                receipt=out/(safe_name(aid)+f'_attempt{d.get("attempts",1)}_billing_'+str(time.time_ns())+'.json')
+                save(receipt,{'asset_id':aid,'attempt':d.get('attempts',1),'reported_cost':cost,'reported_refund':refund})
+                attempt_key=sk+':'+str(d['attempts']) if d.get('attempts') else sk
+                if cost is not None:
+                    store.record_cost(attempt_key,cost);store.record_billing(attempt_key,'reported_charge',cost,str(receipt))
+                    d['reported_cost_yuan']=float(cost)
+                    if float(cost)>float(price):d['price_exceeded']=True
+                if refund is not None:store.record_billing(attempt_key,'reported_refund',refund,str(receipt))
+                d.setdefault('billing_receipts',[]).append(str(receipt));store.put(sk,fp,d)
             url=first(resp,c.get('result_url_paths',[]));b64=first(resp,c.get('result_b64_paths',[]));tid=first(resp,c.get('id_paths',[])) or d.get('task_id')
             if url or b64:break
-            if status(resp,c)=='failed':d.update(phase='failed',response=resp);store.put(sk,fp,d);_refresh(pp);return d
+            if status(resp,c)=='failed':d.update(phase='failed',response=resp,next_at=time.time()+float(cfg['image'].get('retry_seconds',30)));store.put(sk,fp,d);_refresh(pp);return d
             if not tid or not c.get('poll_url'):
                 d.update(phase='uncertain',response=resp);store.put(sk,fp,d);_refresh(pp);raise ValueError('Image result shape unrecognized; keep original task evidence')
             d.update(phase='running',task_id=str(tid),response=resp);store.put(sk,fp,d);_refresh(pp)
@@ -121,8 +152,7 @@ def perform(project_path,profile_path,aid,execute=False):
         if project.get('schema_version')==2:
             from asset_gallery import register_saved
             register_saved(pp,aid,d)
-            from refresh_progress import refresh
-            refresh(pp)
+            _refresh(pp)
         return d
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('project');p.add_argument('profile');p.add_argument('asset_id');p.add_argument('--execute',action='store_true');a=p.parse_args()

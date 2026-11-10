@@ -48,6 +48,10 @@ def validate(project,base,groups=None,stage='ready'):
         if did not in ds: fail('DIALOGUE',str(did),'Unknown dialogue');continue
         d=ds[did]; fs=all_fragments[did]
         if ''.join(f.get('text','') for f in fs)!=d.get('text'): fail('DIALOGUE_TEXT',did,'Fragments do not reconstruct approved dialogue')
+        if d.get('spoken_text') is not None or any(f.get('spoken_text') is not None for f in fs):
+            spoken_target=d.get('spoken_text') if d.get('spoken_text') is not None else d.get('text','')
+            if ''.join((f.get('spoken_text') if f.get('spoken_text') is not None else f.get('text')) or '' for f in fs)!=spoken_target:
+                fail('SPOKEN_FRAGMENT',did,'跨镜实际读法未回拼为已确认整句，可能重复或丢失')
         for f in fs:
             if f.get('speaker')!=d.get('speaker') or f.get('channel')!=d.get('channel'):
                 fail('SPEAKER_CHANNEL',did,'Speaker/channel mismatch',str(f))
@@ -84,9 +88,10 @@ def validate(project,base,groups=None,stage='ready'):
         for s in shots:
             if project.get('schema_version')==2:
                 from speech_metrics import estimate
-                rate=project.get('settings',{}).get('speech_chars_per_second',4.5)
                 try:
-                    stats=estimate(''.join(f.get('spoken_text',f.get('text','')) for f in s.get('speech',[])),rate)
+                    from timing_plan import timing_settings
+                    rate=timing_settings(project)['speech_chars_per_second']
+                    stats=estimate(''.join((f.get('spoken_text') if f.get('spoken_text') is not None else f.get('text')) or '' for f in s.get('speech',[])),rate)
                     if stats['speech_seconds_estimate']>float(s['seconds']):fail('SPEECH_CAPACITY',s['id'],'按去标点口径的纯发声估计已超出镜头时长；不能异常加速凑秒')
                 except ValueError as e:fail('SPEECH_RATE',s['id'],str(e))
                 if not s.get('camera') or not s.get('action'):fail('SHOT_EXECUTION',s['id'],'需有实际镜头机位与动作，不能只填状态')
@@ -147,6 +152,16 @@ def validate(project,base,groups=None,stage='ready'):
             else:
                 review=g.get('review',{})
                 if review.get('status')!='通过' or not review.get('evidence'):fail('SEMANTIC_REVIEW',gid,'Agent source/continuity review evidence required')
+    if project.get('schema_version')==2 and stage!='text':
+        from scene_binding import audit as audit_scene_bindings
+        scene_issues=audit_scene_bindings(project,base,groups)
+        if stage=='ready':
+            for code,obj,msg in scene_issues: fail(code,obj,msg)
+        else:
+            checks.append({'rule_id':'SCENE_BINDING_PENDING','id':'SCENE_BINDING_PENDING','object':'selected project groups',
+                'execution_status':'已执行','status':'待复核' if scene_issues else '通过',
+                'evidence':'结构检查，图片语义和真实画面另需复核',
+                'details':[{'id':c,'object':o,'actual':m} for c,o,m in scene_issues]})
     import datetime
     checks.append({'executed_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'rule_id':'deterministic-v2','execution_status':'已执行','id':'STRUCTURE','object':'selected project groups','version':project.get('version'),
                    'status':'不通过' if problems else '通过','evidence':'Deterministic source/fragment/scene/asset checks',

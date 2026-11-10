@@ -6,7 +6,7 @@ from source_coverage import coverage
 
 QUEUE='stage_queue.json'
 STAGES=('screenplay','storyboard_assets','images')
-BATCH_SIZES={'screenplay':5,'storyboard_assets':5,'images':20}
+BATCH_SIZES={'screenplay':5,'storyboard_assets':5,'images':None}
 STATUSES=('pending','running','completed','failed','blocked')
 
 def _now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -21,6 +21,45 @@ def _basis(p,base):
 
 def _event(q,action,detail):q.setdefault('events',[]).append({'action':action,'detail':detail,'at':_now()})
 def _write(base,q):q['updated_at']=_now();save(Path(base)/QUEUE,q)
+def _publish_progress(project_path,change,batch_id=None,asset_id=None):
+    """Refresh fixed entrances after durable state change; never revoke completed work."""
+    pp=Path(project_path);base=pp.parent
+    event={'at':_now(),'change':change,'batch_id':batch_id,'asset_id':asset_id,
+           'status':'通过','execution_status':'未执行','issues':[],'media_calls':0}
+    try:
+        from batch_video import blocking_exclusive
+        # Match publisher lock order, then let refresh_owned recheck under its locks.
+        with blocking_exclusive(base/'.asset-registry.lock'):
+          with blocking_exclusive(base/'.preview-refresh.lock'):
+                project=load(pp);meta=project.get('muflow_init_v240')
+                if not isinstance(meta,dict) or not meta.get('id') or not meta.get('state_path'):
+                    raise ValueError('项目没有已验证的预览归属状态，保留已有文件并待复核')
+                root=base.resolve();state_path=(base/meta['state_path']).resolve()
+                if not state_path.is_relative_to(root) or not state_path.is_file():raise ValueError('预览归属状态缺失或越过项目目录')
+                state=load(state_path)
+                if state.get('id')!=meta['id'] or state.get('status')!='complete' or state.get('pending_files'):
+                    raise ValueError('项目初始化未完成或入口冲突未解决，保留现有文件')
+                from init_project import PANELS
+                for folder,name,_ in PANELS.values():
+                    rel=folder+'/'+name;path=base/rel
+                    if not path.is_file() or state.get('owned_files',{}).get(rel)!=sha(path):raise ValueError('入口未登记或已被修改，保留现有文件：'+rel)
+        from refresh_progress import refresh_owned
+        event['execution_status']='已执行';result=refresh_owned(pp);event['execution_status']=result.get('execution_status',event['execution_status']);event['issues']=result.get('issues',[])
+        missing=sorted({'assets','preview','videos'}-set(result))
+        if missing:event['issues'].append({'object':','.join(missing),'result':'待复核','error':'入口刷新无返回记录'})
+        if event['issues']:event['status']='待复核'
+    except Exception as exc:
+        event['status']='待复核';event['issues']=[{'object':'refresh_progress','result':'待复核','error_type':type(exc).__name__,'error':str(exc)}]
+    try:
+        from batch_video import blocking_exclusive
+        folder=base/'99_工作区';folder.mkdir(parents=True,exist_ok=True)
+        with blocking_exclusive(folder/'.stage-preview-evidence.lock'):
+            with (folder/'阶段队列_面板刷新记录.jsonl').open('a',encoding='utf-8') as f:f.write(json.dumps(event,ensure_ascii=False)+'\n')
+    except Exception as exc:
+        import sys
+        print('面板刷新记录未写入，状态需复核：'+type(exc).__name__+': '+str(exc),file=sys.stderr)
+    return event
+
 def _stage(q,name):return q['stages'][name]
 def _episode_batches(episodes,stage):
     prefix='SC' if stage=='screenplay' else 'SA'
@@ -49,6 +88,8 @@ def initialize(project_path):
         if q.get('source_basis',{}).get('source_sha256')!=basis['source_sha256'] or q.get('source_basis',{}).get('episode_ids')!=basis['episode_ids']:
             raise ValueError('Full source baseline changed; preserve this queue and explicitly rebaseline a new plan, never silently shrink/reset completed work')
         before=copy.deepcopy(q);old=_stage(q,'images')['items']
+        if q.setdefault('batch_sizes',{}).get('images') is not None:
+            q['batch_sizes']['images']=None;_event(q,'image_dispatch_unbounded','保留旧批证据，跨批滚动就绪')
         if set(old)-set(specs):raise ValueError('Asset plan would shrink; preserve existing image tasks and reconcile explicitly')
         for aid,spec in specs.items():
             if aid not in old:old[aid]=spec;_event(q,'asset_added',aid)
@@ -194,22 +235,26 @@ def next_batch(project_path):
             if pending:
                 b=pending[0];result={'action':'ready' if b['status']=='pending' else b['status'],'stage':stage,'batch_id':b['id'],'episodes':b['episodes'],'status':b['status'],'reason':b.get('error')};break
         if result is None:
-            _reuse(q,p,base);items=_stage(q,'images')['items'];batches=_stage(q,'images')['batches'];active=next((b for b in batches if b['status']!='completed'),None)
+            _reuse(q,p,base);items=_stage(q,'images')['items'];batches=_stage(q,'images')['batches']
+            pending_batch=next((b for b in batches if b['status']=='pending'),None)
+            running_batch=next((b for b in batches if b['status']=='running'),None)
             if not items:result={'action':'blocked','stage':'images','reason':'全剧分镜资产完成后仍未登记全量资产清单；不能把空图表当作全剧完成'}
-            elif active:
-                aids=[aid for aid in active['asset_ids'] if items[aid]['status']!='completed'];checks=[_parents_ready(q,p,base,aid) for aid in aids]
-                result={'action':('ready' if all(x[0] for x in checks) else 'blocked') if active['status']=='pending' else active['status'],'stage':'images','batch_id':active['id'],'asset_ids':aids,'status':active['status'],'reason':next((x[1] for x in checks if not x[0]),active.get('error'))}
+            elif pending_batch:
+                aids=[aid for aid in pending_batch['asset_ids'] if items[aid]['status']!='completed'];checks=[_parents_ready(q,p,base,aid) for aid in aids]
+                result={'action':'ready' if all(x[0] for x in checks) else 'blocked','stage':'images','batch_id':pending_batch['id'],'asset_ids':aids,'status':'pending','reason':next((x[1] for x in checks if not x[0]),None)}
             else:
-                pending=[aid for aid,item in items.items() if item['status']=='pending'];eligible=[aid for aid in pending if _parents_ready(q,p,base,aid)[0]][:20]
+                pending=[aid for aid,item in items.items() if item['status']=='pending'];eligible=[aid for aid in pending if _parents_ready(q,p,base,aid)[0]]
                 if eligible:
                     active={'id':'IM'+str(len(batches)+1).zfill(3),'stage':'images','asset_ids':eligible,'status':'pending','artifacts':[],'history':[]};batches.append(active);_event(q,'image_batch_prepared',{'batch_id':active['id'],'asset_ids':eligible})
                     result={'action':'ready','stage':'images','batch_id':active['id'],'asset_ids':eligible,'status':'pending'}
                 elif all(item['status']=='completed' for item in items.values()):result=_finish_state(q,p,base)
-                else:result={'action':'blocked','stage':'images','reason':next((_parents_ready(q,p,base,aid)[1] for aid in pending if not _parents_ready(q,p,base,aid)[0]),'图片任务存在failed/blocked状态，按原批次复核后显式retry')}
+                elif running_batch:result={'action':'running','stage':'images','batch_id':running_batch['id'],'asset_ids':[aid for aid in running_batch['asset_ids'] if items[aid]['status']!='completed'],'status':'running'}
+                else:result={'action':'blocked','stage':'images','reason':next((_parents_ready(q,p,base,aid)[1] for aid in pending if not _parents_ready(q,p,base,aid)[0]),'图片任务存在failed/blocked状态，按原任务复核后恢复')}
     if result.get('stage')=='images' and result.get('asset_ids'):
         result['asset_operations']=[{'asset_id':aid,'operation':_stage(q,'images')['items'][aid].get('mode'),'generation_required':_stage(q,'images')['items'][aid].get('mode')!='reuse'} for aid in result['asset_ids']]
     result.update(generation_authorized=False,video_authorized=False);q['cursor']={k:result.get(k) for k in ('stage','batch_id','action')}
-    if q!=before:_write(base,q)
+    if q!=before:
+        _write(base,q);_publish_progress(pp,'queue_updated',result.get('batch_id'))
     return result
 
 def start_batch(project_path,batch_id):
@@ -221,7 +266,47 @@ def start_batch(project_path,batch_id):
     if stage=='images':
         for aid in b['asset_ids']:
             if _stage(q,'images')['items'][aid]['status']!='completed':_stage(q,'images')['items'][aid]['status']='running'
-    _write(base,q);return b
+    _write(base,q);_publish_progress(pp,'batch_started',batch_id);return b
+
+def complete_image(project_path,batch_id,asset_id,artifact,evidence):
+    """Record one actual output; release its dependants without waiting for siblings."""
+    if not evidence or not isinstance(artifact,dict):raise ValueError('Concrete image evidence required')
+    initialize(project_path);pp,p,base=_read(project_path);q=load(base/QUEUE);stage,b=_find(q,batch_id)
+    if stage!='images' or b['status'] not in ('running','completed') or asset_id not in b['asset_ids']:raise ValueError('Image is not in the running batch')
+    if not _earlier_complete(q,stage) or _invalid_completed(q,base,p):raise ValueError('Earlier text/image evidence invalid')
+    item=_stage(q,'images')['items'][asset_id];a=next(x for x in p['assets'] if x['id']==asset_id)
+    if item['status']=='completed':
+        if item['artifacts'][0]['sha256']==artifact.get('sha256'):return b
+        raise ValueError('Already completed with different image; preserve version')
+    _artifact(base,artifact)
+    if artifact.get('kind')!='image' or artifact.get('asset_id')!=asset_id or artifact['sha256']!=a.get('sha256') or sha(resolve(base,a.get('local_path','')))!=artifact['sha256']:raise ValueError('Image completion must match registered asset')
+    from PIL import Image
+    with Image.open(resolve(base,artifact['path'])) as im:im.verify()
+    ok,why=_parents_ready(q,p,base,asset_id)
+    if not ok:raise ValueError(why)
+    if a.get('parent_id'):
+        parent=next(x for x in p['assets'] if x['id']==a['parent_id']);audit=a.get('edit_audit',{})
+        if audit.get('operation')!='image_edit' or audit.get('input_asset_id')!=parent['id'] or audit.get('input_sha256')!=parent.get('sha256') or audit.get('input_count')!=1:raise ValueError('Actual mother reference audit missing')
+    item.update(status='completed',artifacts=[copy.deepcopy(artifact)],completion={'subject_digest':__import__('review_state').asset_subject(p,a),'evidence':evidence,'kind':'registered_output','at':_now()})
+    item.setdefault('completion_history',[]).append({'completion':copy.deepcopy(item['completion']),'artifacts':copy.deepcopy(item['artifacts'])})
+    b.setdefault('artifacts',[]).append(copy.deepcopy(artifact));b['history'].append({'status':'image_completed','asset_id':asset_id,'evidence':evidence,'at':_now()});_event(q,'image_completed',asset_id)
+    if all(_stage(q,'images')['items'][aid]['status']=='completed' for aid in b['asset_ids']):
+        fp=digest({'artifacts':b['artifacts'],'evidence':evidence});b.update(status='completed',completion={'evidence':evidence,'proof_digest':fp,'input_proof_digest':fp,'at':_now()})
+        b.setdefault('completion_history',[]).append({'completion':copy.deepcopy(b['completion']),'artifacts':copy.deepcopy(b['artifacts'])});_event(q,'completed',batch_id)
+    elif all(_stage(q,'images')['items'][aid]['status'] not in ('running','pending') for aid in b['asset_ids']):
+        b.update(status='blocked',error='部分图片仍需核对或恢复')
+    _write(base,q);_publish_progress(pp,'image_completed',batch_id,asset_id);return b
+
+def block_image(project_path,batch_id,asset_id,evidence):
+    if not evidence:raise ValueError('Concrete image block evidence required')
+    pp,p,base=_read(project_path);q=load(base/QUEUE);stage,b=_find(q,batch_id)
+    if stage!='images' or b['status']!='running' or asset_id not in b['asset_ids']:raise ValueError('Image is not in running batch')
+    item=_stage(q,'images')['items'][asset_id]
+    if item['status']=='completed':raise ValueError('Cannot block completed image')
+    item.update(status='blocked',error=evidence);item.setdefault('history',[]).append({'status':'blocked','evidence':evidence,'at':_now()})
+    b['history'].append({'status':'image_blocked','asset_id':asset_id,'evidence':evidence,'at':_now()});_event(q,'image_blocked',asset_id)
+    if all(_stage(q,'images')['items'][aid]['status'] not in ('running','pending') for aid in b['asset_ids']):b.update(status='blocked',error='部分图片仍需核对或恢复')
+    _write(base,q);_publish_progress(pp,'image_blocked',batch_id,asset_id);return b
 
 def _snapshot_accumulating_tables(base,batch_id,artifacts):
     """Freeze the actual table bytes so later --refresh cannot invalidate an earlier batch."""
@@ -280,7 +365,7 @@ def complete_batch(project_path,batch_id,artifacts,evidence):
     if stage=='images':
         for aid in b['asset_ids']:
             item=_stage(q,'images')['items'][aid];item.setdefault('completion_history',[]).append({'completion':copy.deepcopy(item.get('completion')),'artifacts':copy.deepcopy(item['artifacts'])})
-    b['history'].append({'status':'completed','evidence':evidence,'at':_now()});_event(q,'completed',batch_id);_write(base,q);return b
+    b['history'].append({'status':'completed','evidence':evidence,'at':_now()});_event(q,'completed',batch_id);_write(base,q);_publish_progress(pp,'batch_completed',batch_id);return b
 
 def set_status(project_path,batch_id,status,evidence):
     if status not in ('failed','blocked') or not evidence:raise ValueError('Explicit failure/block status and evidence required')
@@ -290,7 +375,7 @@ def set_status(project_path,batch_id,status,evidence):
     if stage=='images':
         for aid in b['asset_ids']:
             if _stage(q,'images')['items'][aid]['status']!='completed':_stage(q,'images')['items'][aid]['status']=status
-    _write(base,q);return b
+    _write(base,q);_publish_progress(pp,'batch_status_changed',batch_id);return b
 
 def retry_batch(project_path,batch_id,evidence):
     if not evidence:raise ValueError('Explicit reconciliation/retry evidence required')
@@ -300,7 +385,7 @@ def retry_batch(project_path,batch_id,evidence):
     if stage=='images':
         for aid in b['asset_ids']:
             if _stage(q,'images')['items'][aid]['status'] in ('failed','blocked'):_stage(q,'images')['items'][aid]['status']='pending'
-    _write(base,q);return b
+    _write(base,q);_publish_progress(pp,'batch_retry',batch_id);return b
 
 def progress(p,base=None):
     """Read-only UI snapshot; accepts a project path, or project data plus its base."""
@@ -320,7 +405,7 @@ def progress(p,base=None):
     final=_finish_state(q,p,base) if stage=='prevideo_preview' else None
     if final:stage=final['stage']
     active=next((b for b in _stage(q,stage)['batches'] if b['status']!='completed'),None) if stage in STAGES else None
-    messages=['阶段顺序：全剧剧本每5集 → 全剧分镜与资产表每5集 → 全量资产图每20张；ready仅本地就绪，视频未授权']
+    messages=['阶段顺序：全剧剧本每5集 → 全剧分镜与资产表每5集 → 全量就绪资产图滚动执行；ready仅本地就绪，视频未授权']
     if stale:messages.append('独立全剧范围/原文已变化，旧队列不可继续')
     if errors:messages.extend(e[2] for e in errors)
     if final:messages.append(final['reason'])

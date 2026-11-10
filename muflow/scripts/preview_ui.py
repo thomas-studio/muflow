@@ -105,7 +105,9 @@ def state_text(shot, end=False):
 def sound_cell(shot):
     lines = []
     for speech in shot.get('speech', []):
-        meta = '；'.join(str(v) for v in (speech.get('channel'),speech.get('emotion'),speech.get('delivery'),speech.get('tone')) if v)
+        relation = {'offscreen':'说话人画外','onscreen':'说话人画内'}.get(speech.get('camera_relation'))
+        continuation = '同句接上镜' if speech.get('continues_from_previous') is True else None
+        meta = '；'.join(str(v) for v in (speech.get('channel'),relation,continuation,speech.get('emotion'),speech.get('delivery'),speech.get('tone')) if v)
         lines.append('<div class="speech"><b>'+esc(speech.get('speaker','人物待核对'))+'</b><span class="meta">【'+esc(meta or '声道／情绪待补')+'】</span>：“'+esc(speech.get('text',speech.get('spoken_text','')))+'”</div>')
     effects = shot.get('sound_effects', [])
     if isinstance(effects, str):

@@ -107,10 +107,25 @@ class Acceptance(unittest.TestCase):
         a=self.p['assets'][0];self.p['workflow']['asset_feedback']=[{'asset_id':a['id'],'status':'待处理','evidence':'Synthetic returned image'}]
         with self.assertRaisesRegex(ValueError,'feedback unresolved'):mother_ready(self.p,self.base,a)
     def test_multi_asset_feedback_report_does_not_break_panel_refresh(self):
+        from init_project import initialize,STATE
         from refresh_progress import refresh
-        self.p['workflow']['asset_feedback']=[{'asset_ids':[a['id'] for a in self.p['assets'][:2]],'status':'待处理','evidence':'Synthetic joint issue'}]
-        sync(self.p,self.cfg,self.base);result=refresh(self.base/'project.json')
-        self.assertTrue(Path(result['review_report']).is_file());self.assertTrue((self.base/'99_工作区/面板刷新状态.json').is_file())
+        source=self.base/'new-source.txt';source.write_text('第1集\n原创合成正文。',encoding='utf-8')
+        target=self.base/'initialized-project';self.assertEqual(initialize(target,source)['status'],'complete')
+        base_project=load(target/'project.json');project=copy.deepcopy(self.p)
+        project[STATE]=base_project[STATE];project['input_source_path']=base_project['input_source_path']
+        project['source_path']=str(self.base/'source.json')
+        project['workflow']['asset_feedback']=[{'asset_ids':[a['id'] for a in project['assets'][:2]],'status':'待处理','evidence':'Synthetic joint issue'}]
+        save(target/'project.json',project);result=refresh(target/'project.json')
+        self.assertTrue(Path(result['review_report']).is_file());self.assertTrue((target/'99_工作区/面板刷新状态.json').is_file())
+    def test_legacy_refresh_does_not_overwrite_unverified_existing_reports(self):
+        from refresh_progress import refresh
+        report=self.base/'03_资产图/资产审核问题汇总.md';report.parent.mkdir(exist_ok=True)
+        report.write_text('用户原有审核汇总',encoding='utf-8')
+        status=self.base/'99_工作区/面板刷新状态.json';status.parent.mkdir(exist_ok=True)
+        status.write_text('{"existing":true}',encoding='utf-8')
+        result=refresh(self.base/'project.json')
+        self.assertTrue(result['issues']);self.assertEqual(report.read_text(encoding='utf-8'),'用户原有审核汇总')
+        self.assertEqual(status.read_text(encoding='utf-8'),'{"existing":true}')
     def test_resolved_feedback_needs_actual_recheck_record(self):
         a=self.p['assets'][0];self.p['workflow']['asset_feedback']=[{'asset_id':a['id'],'status':'已解决','evidence':'Synthetic claim only'}]
         with self.assertRaisesRegex(ValueError,'resolution evidence'):asset_ready(self.p,a)

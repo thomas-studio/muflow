@@ -168,7 +168,14 @@ def _group_card(data, group, episode, assets, resources, previous, following, it
     selected = _selected_ids(group,episode)
     selected_seconds = sum(_seconds(s.get('seconds')) for s in shots if s.get('id') in selected)
     bindings = group.get('bindings', [])
-    rows = ['<article class="card" id="ep-'+str(episode)+'-group-'+esc(gid)+'" data-group-id="'+esc(gid)+'"><header class="chd"><h3>'+esc(gid)+' · '+esc(group.get('title',group.get('name','30秒素材组')))+'</h3><div class="sub">本集使用 '+esc(f'{selected_seconds:g}')+' 秒 / 完整 '+esc(group.get('expected_seconds','待定'))+' 秒 · '+str(len(selected))+' / '+str(len(shots))+' 镜 · '+str(len(bindings))+' 张参考图；相同组号仅生成一次</div></header><div class="cbd">']
+    rows = ['<article class="card" id="ep-'+str(episode)+'-group-'+esc(gid)+'" data-group-id="'+esc(gid)+'"><header class="chd"><h3>'+esc(gid)+' · '+esc(group.get('title',group.get('name','30秒素材组')))+'</h3><div class="sub">本集镜头分配 '+esc(f'{selected_seconds:g}')+' 秒 / 完整 '+esc(group.get('expected_seconds','待定'))+' 秒 · '+str(len(selected))+' / '+str(len(shots))+' 镜 · '+str(len(bindings))+' 张参考图；相同组号仅生成一次</div></header><div class="cbd">']
+    if group.get('trim_tail_seconds') is not None:
+        tail = _seconds(group['trim_tail_seconds'])
+        duration = _seconds(group.get('expected_seconds'))
+        if 0 <= tail < duration and group.get('trim_tail_basis'):
+            rows.append('<p class="meta">整组生成 '+esc(f'{duration:g}')+' 秒；建议留用前 '+esc(f'{duration-tail:g}')+' 秒，尾部 '+esc(f'{tail:g}')+' 秒可人工剪辑。依据：'+esc(group['trim_tail_basis'])+'。本集镜头分配尚未扣除剪辑尾部。</p>')
+        else:
+            rows.append('<p class="warn">尾部剪辑范围或依据待核。</p>')
     rows.append('<div class="bind">'+(' / '.join('@'+esc(b.get('name',''))+'=图'+str(i) for i,b in enumerate(bindings,1)) or '参考图绑定待准备')+'</div>')
     rows.append('<div class="refs">'+''.join(image_card(i,b,assets.get(b.get('asset_id'),{}),resources.get(b.get('asset_id'),{'present':False,'reason':'资产未登记'})) for i,b in enumerate(bindings,1))+'</div>')
     rows.append('<p class="bridge">← 承上：'+esc(group.get('entry_state') or (state_text(previous,True) if previous else '本剧起点；按本组首镜进入状态'))+'</p>')
@@ -222,7 +229,8 @@ def build(project_path, out, profile_path=None, episodes=None):
         cfg = {}
         diagnostics.append({'id':'PROFILE_READ','object':'local_profile','actual':str(exc)})
     video = cfg.get('video', {})
-    parameters = {k:v for k,v in video.items() if k in ('model','resolution','concurrency','verified_concurrency_limit','verified_max_images','verified_durations_seconds','max_price_per_attempt_yuan','poll_seconds','retry_seconds')}
+    parameters = {k:v for k,v in video.items() if k in ('model','resolution','verified_max_images','verified_durations_seconds','max_price_per_attempt_yuan','poll_seconds','retry_seconds')}
+    parameters['concurrency_policy'] = '无应用层并发上限；实际服务限流与预算按回执处理'
     price = video.get('max_price_per_attempt_yuan')
     priced = isinstance(price,(int,float)) and not isinstance(price,bool)
     quote = {'run_scope':scope, 'parameters':parameters,
@@ -240,9 +248,13 @@ def build(project_path, out, profile_path=None, episodes=None):
     local = _validation(data,base,'local')
     ready = _validation(data,base,'ready')
     local_issues, ready_issues = local.get('issues', []), ready.get('issues', [])
+    scene_check = next((c for c in local.get('checks', []) if c.get('id')=='SCENE_BINDING_PENDING'), None)
+    scene_pending = [{'id':row.get('id'),'object':row.get('object'),'actual':row.get('actual'),'status':'待复核'}
+                     for row in (scene_check or {}).get('details',[])]
     if not profile_path or not video.get('model') or not video.get('resolution'):
         ready_issues.append({'id':'PROFILE_PENDING','object':'local_profile','actual':'执行API模型／规格尚未从所传本机配置核实；本地审阅仍可进行'})
     diagnostics.extend(local_issues)
+    diagnostics.extend(scene_pending)
     assets = {a.get('id'):a for a in data.get('assets', [])}
     bound_ids = {b.get('asset_id') for g in groups for b in g.get('bindings', [])}
     resources = {aid:image_resource(base,out,assets.get(aid,{})) for aid in bound_ids}
@@ -252,7 +264,7 @@ def build(project_path, out, profile_path=None, episodes=None):
     queue = _progress(data,base)
     readiness = _readiness(data,base)
     stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    checks = {'source_digest':digest(data), 'issues':diagnostics,
+    checks = {'source_digest':digest(data), 'issues':diagnostics, 'scene_binding_pending':scene_pending,
               'prepared':execution_ready, 'local_issues':local_issues, 'execution_issues':ready_issues,
               'source_coverage':source, 'stage_queue':queue, 'readiness':readiness, 'media_calls':0, 'updated_at':stamp,
               'local_preview_created':True, 'execution_ready':execution_ready,
@@ -280,6 +292,10 @@ def build(project_path, out, profile_path=None, episodes=None):
     heading += '<div class="panel"><p><b>原剧本范围：</b>'+esc(_range_text(source['source_episodes']))+'；独立基准 '+esc('已核实' if source['basis_status']=='verified' else '待核实')+'</p><p><b>本次拟运行：</b>'+esc(_range_text(requested))+'；已排：'+esc(_range_text(source['grouped_episodes']))+'；全剧缺口：'+esc(_range_text(source['missing']) if source['missing'] else '无已知缺集')+'</p><p><b>审阅方式：</b>'+esc(mode_label)+'；审批状态以实际确认记录为准。</p><p class="local-only">本地页可在文字、图片、API或上传尚未完成时审阅。原图可点开；尚缺内容按真实状态标出。</p><p class="execution-only"><b>执行核对：</b>'+('当前结构检查可进入后续执行门槛' if execution_ready else '尚未就绪，请查看折叠诊断')+'；远端地址仅为登记状态，未在此页联网验证。</p><p>本面板只更新本地文件。打开或刷新不会上传、试跑或提交媒体请求。</p></div>'
     if not source['complete']:
         heading += '<p class="warn">原范围与本次覆盖尚未全部核实：全剧待排 '+esc(_range_text(source['missing']) if source['missing'] else '无已知缺集')+'；本次待排 '+esc(_range_text(requested_missing) if requested_missing else '无已知缺集')+'。原范围待核实时不能宣称全剧完成。</p>'
+    if scene_pending:
+        heading += '<section class="panel warn" id="scene-binding-review"><h2>场景绑定待复核（'+str(len(scene_pending))+'）</h2><p>以下问题不阻止打开本地预览；视频执行须待相应检查及既有审核通过。</p><ul>'+''.join('<li>'+esc(row['object'])+'：'+esc(row['actual'])+'（待复核；'+esc(row['id'])+'）</li>' for row in scene_pending)+'</ul></section>'
+    elif scene_check:
+        heading += '<section class="panel" id="scene-binding-review"><h2>场景绑定结构检查已运行</h2><p>当前未发现结构错配；实际图片内容和模型成片仍需复核。</p></section>'
     heading += details('制作规格、声音与阶段记录','<pre>'+esc(value_text({'settings':data.get('settings',{}),'workflow':data.get('workflow',{}),'source_coverage':source}))+'</pre>')
     queue_state = {'not_initialized':'未初始化','active':'进行中','blocked':'待解决问题','completed':'台账已完成'}.get(queue.get('state'),queue.get('state','未初始化'))
     queue_stage = {'screenplay':'全剧剧本','storyboard_assets':'全剧分镜与资产表','images':'全量资产图','prevideo_preview':'跑前预览','awaiting_review':'图片审阅与修图'}.get(queue.get('stage'),queue.get('stage') or '待准备')
@@ -322,4 +338,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='刷新同一个本地跑前面板；不上传、不生成媒体')
     parser.add_argument('project'); parser.add_argument('out'); parser.add_argument('--profile'); parser.add_argument('--episodes')
     args = parser.parse_args()
-    print(json.dumps(build(args.project,args.out,args.profile,args.episodes),ensure_ascii=False))
+    expected=(Path(args.project).resolve().parent/'07_跑前预览').resolve()
+    if Path(args.out).resolve()!=expected:parser.error('受保护刷新只支持项目内固定的07_跑前预览目录')
+    if args.episodes is not None:parser.error('受保护刷新不支持--episodes；请在项目真实范围中设置后重新交付')
+    from refresh_progress import refresh_owned
+    result=refresh_owned(args.project,args.profile);print(json.dumps(result,ensure_ascii=False));raise SystemExit(1 if result.get('issues') else 0)

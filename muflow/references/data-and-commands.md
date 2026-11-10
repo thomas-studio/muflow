@@ -1,10 +1,10 @@
-# 数据与命令 · schema 2 / V2.3.1
+# 数据与命令 · schema 2 / V2.4.0
 
 作品与本机配对配置分别保存。使用项目要求和已确认参数，不继承旧作品的时长、车型或改词。源稿、执行稿、请求、采用图、退回图和每次回执分版本保留。
 
 ## 主数据
 
-- project_id、version、schema_version=2、source_path。settings含媒介/画风、asset_ratio/scene_ratio默认16:9、单独确认的video_ratio、episode_duration_mode=story_driven、group_target_seconds=30、speech_chars_per_second默认4.5、action_seconds_per_beat默认2.2、外置配对的video_model及四个声音/文字开关。不再填写统一episode_target_seconds；各集时长为计算结果，禁止再询问150秒/集。估算口径不是实测或模型能力证明；预算和价格来自外部profile。
+- project_id、version、schema_version=2、source_path。settings含媒介/画风、asset_ratio/scene_ratio默认16:9、单独确认的video_ratio、episode_duration_mode=story_driven、group_target_seconds=30、timing_mode默认company-speech-ratio、speech_chars_per_second默认5、non_speech_ratio_min/max分别为0.10/0.15、外置配对的video_model及四个声音/文字开关。不再填写统一episode_target_seconds；各集时长为计算结果，禁止再询问150秒/集。估算口径不是实测或模型能力证明；预算和价格来自外部profile。
 - adaptation_review：status、evidence，实际完成短剧适配审查后登记；不以软件检测代替。
 - episodes：数字id、title及起止/集尾落点；scenes：id、episode、name、time、transition、key_action。时间未明保留未明。
 - dialogues：id、episode、text、source_ids、speaker、channel、emotion、evidence；修改保留source_text及approval。episode用于检查所选集是否整句遗漏；每条及各片段按原顺序完整归入同集。数字单位的实际读法可加spoken_text，只服务时长估计，不替换锁定台词。
@@ -67,7 +67,7 @@ image_api原始结果移到99_工作区/生图原始记录，自动登记并导�
 - 资产review：status、subject_digest、performed_by（agent/human）、checked_at、evidence、checks。check包含rule_id、expected、observed、evidence、result。身份阶段identity_stage、外貌appearance为基础；scene/vehicle加space；identity_sheet加video_reference。subject_digest由review_state.asset_subject对当前身份、状态、操作模式、提示词、母图/母图哈希、图片哈希等内容生成，不由代理手写任意摘要。
 - 组review采用同样结构；checks另有shot_ids，必须覆盖本组全部镜头。基础story_continuity、space，有台词加speaker_channel，有音效加physical_sound。摘要由review_state.group_subject生成，绑定当前镜头、引用场景/台词与有序绑定。非空证据或一段“全部通过”不够。
 - workflow.image_approval.items每项按asset_id、sha256、subject_digest绑定真实人工用户事件。approve_images可选asset_ids，workflow_review.py approve-images可加--asset-ids；先确认母图可行。agent模式只填真实审查，不生成伪造人工采用；未选择环节不适用。
-- 资产图册固定03_资产图/00_资产参考图总览.html；跑前固定07_跑前预览/全剧跑前预览.html。输入盘点后可零API创建，资产表另提供实际文件入口。页面是持续更新入口，项目version、内容摘要、导出快照和批准范围分别显示。
+- 资产图册固定03_资产图/00_资产参考图总览.html；跑前固定07_跑前预览/全剧跑前预览.html。读取输入之前可零API创建，资产表另提供实际文件入口。页面是持续更新入口，项目version、内容摘要、导出快照和批准范围分别显示。
 - build_preview.build(project,out,profile_path=None,episodes=None)保持接口；out传项目07_跑前预览，允许原位刷新，旧页面及compiled_jobs、quote_snapshot、run_scope、preview_checks、timing_plan归档history下唯一时间版本。preview_resources按图片SHA复用原图/缩略资源，避免逐镜嵌入重复大图。
 - 两视图共用compile_jobs.source_digest所指内容摘要。本地缺OSS也显示实际图片/分镜/缺项；preview_checks分别记录local_issues、execution_issues、execution_ready、source_coverage与更新时间等。执行门槛仍核对实际远端对象/哈希、有效引用、有序数组、费用及当前完整预览后的用户启动。
 
@@ -78,4 +78,18 @@ image_api原始结果移到99_工作区/生图原始记录，自动登记并导�
 
 本版新增init_project.py DIRECTORY SOURCE [--project-id]提取原文与模板并立即建立三入口；已有项目用refresh_progress.py PROJECT [--profile]在每批/每次图片或审查事件后同步刷新。export_assets.py SOURCE PROJECT OUT --refresh更新固定资产表目录的资产拆解表.xlsx、资产清单源.json、生图提示词清单.md、资产图_出图任务.json，旧版归档history，均为零媒体调用。启动先完成全剧无API文字，API/OSS在全部文字交付后集中询问；配置资料不代替实际生图阶段许可。
 
-stage_queue.py只作本地5集剧本／5集分镜资产／20张图片分批台账。图片complete仅表示已出图；next末态先awaiting_review/asset_review，统一readiness满足实际内容、全量结构、技术与所选审核后才ready_preview/prevideo_preview，未取得必需人工结论不能满血。台账不产生生图或视频授权，最终完整当前预览实际交付后仍等明确人工启动。
+stage_queue.py只作本地5集剧本／5集分镜资产及图片依赖与进度台账；图片记录分页不得成为并发上限。图片complete仅表示已出图；next末态先awaiting_review/asset_review，统一readiness满足实际内容、全量结构、技术与所选审核后才ready_preview/prevideo_preview，未取得必需人工结论不能满血。台账不产生生图或视频授权，最终完整当前预览实际交付后仍等明确人工启动。
+
+
+## V2.4 音画和尾部使用范围
+
+每个speech片段可登记camera_relation为onscreen/offscreen；offscreen不改变原channel（现场、电话、消息、内心）。同一个dialogue ID跨镜拆分时，后段以continues_from_previous=true标明实际紧接上镜；所有文本按源顺序回拼。对道具做镜头主体时，camera_subjects和visible_entities登记对应物件实体，已登记参考图要进入本镜asset_ids并按真实顺序绑定到本组；画外持有人仍按状态账记录。
+
+在有明确依据时，group.trim_tail_seconds为组末可人工剪去的秒数，group.trim_tail_basis记录具体裁剪依据；没有登记不推断所有估算余量都可剪。组请求仍为30秒，实际剧情和尾部留量分别在计时报告展示。
+
+
+## V2.4.1 逐镜场景绑定结构
+
+实际项目由制作智能体对照来源和已确认剧本填写 `scene_binding_baseline`：`source_sha256` 是 `source_path` 指向的来源数据文件的 SHA256；`evidence` 说明实际核查来源；`scenes` 数组每项填 `scene_id`、`episode`、`scene_name`、`source_id`、`location_id`（地点实体）、`space_id`（子空间）、`inout`、`time`、`evidence`、`allowed_scene_asset_ids`。来源场次、内外和时间必须与已有 `scenes` 对齐；该独立基准不能靠现有镜头绑定倒推。
+
+场景资产填 `scene_identity`，包含 `location_id`、`space_id`、`inout`、`time` 和 `evidence`；每镜填 `primary_scene_asset_id`，同一ID必须也在镜头 `asset_ids` 和组 `bindings`。必要背景或过渡图在 `secondary_scene_asset_ids` 明列，并填 `secondary_scene_evidence` 说明空间关系。资产身份字段是登记证据而非视觉验证；还要对当前真实图、提示词图号、实际上传数组及哈希分别检查并留证。旧项目缺新基准时展示待复核，不能自动认定通过。

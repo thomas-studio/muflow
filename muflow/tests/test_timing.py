@@ -7,7 +7,7 @@ from workflow_gate import confirm_project,settings_snapshot
 from timing_plan import *
 
 class Timing(unittest.TestCase):
-    def project(self):return {'settings':{'medium':'真人','quality':'自然中性影调','video_ratio':'9:16'}}
+    def project(self):return {'settings':{'timing_mode':'legacy','medium':'真人','quality':'自然中性影调','video_ratio':'9:16'}}
     def atom(self,aid,seconds):return {'id':aid,'speech':[],'seconds':30,'timing':{'action_seconds':seconds,'action_basis':'Original synthetic ordered action','allocation_basis':'Explicit synthetic acting/editing allowance'}}
     def settings(self):return timing_settings(self.project())
     def codes(self,p):return {x['code'] for x in build_plan(p)['issues']}
@@ -15,7 +15,7 @@ class Timing(unittest.TestCase):
     def test_no_uniform_episode_target_or_timing_question_required(self):
         p=self.project();c=confirm_project(p,'Synthetic user already gave ratio and visual style')
         self.assertEqual(c['status'],'confirmed');self.assertNotIn('episode_target_seconds',settings_snapshot(p));self.assertEqual(settings_snapshot(p)['group_target_seconds'],30)
-    def test_default_estimates_are_four_point_five_and_two_point_two(self):
+    def test_legacy_estimates_are_four_point_five_and_two_point_two(self):
         s=self.settings();self.assertEqual(s['speech_chars_per_second'],4.5);self.assertEqual(s['action_seconds_per_beat'],2.2)
     def test_user_table_is_estimated_not_measured(self):
         for chars,beats,want in ((420,15,126.333333),(437,16,132.311111),(534,14,149.466667)):

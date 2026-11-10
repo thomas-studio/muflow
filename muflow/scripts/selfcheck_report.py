@@ -32,6 +32,18 @@ def project_records(p):
                 'evidence':error or record.get('user_event',{}).get('source')})
         for issue in item.get('review',{}).get('issues',[]):issues.append(dict(issue,object=item['id'],version=item.get('version',p.get('version'))))
     for row in p.get('workflow',{}).get('asset_feedback',[]):issues.append(dict(row,category='用户反馈',object=row.get('asset_id',row.get('asset_ids')),version=p.get('version')))
+    # A deterministic estimate can flag a concern, never certify its dramatic resolution.
+    from timing_plan import build_plan
+    try:timing=build_plan(p)
+    except (ValueError,TypeError,KeyError) as exc:
+        checks.append({'id':'计时与镜头节奏提示','object':'project','version':p.get('version'),
+          'rule_id':'TIMING_PREPARING','status':'待复核','execution_status':'估算未完成',
+          'evidence':str(exc),'basis':'检查当前项目计时数据'})
+    else:
+        for warning in timing.get('warnings',[]):
+            checks.append({'id':'计时与镜头节奏提示','object':warning.get('object'),'version':p.get('version'),
+              'rule_id':warning.get('code'),'status':'待复核','execution_status':'程序估算已执行；叙事语义需实际复核',
+              'evidence':warning.get('message'),'basis':timing.get('basis')})
     return checks,issues
 
 def build(inputs):

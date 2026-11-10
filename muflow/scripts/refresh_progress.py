@@ -3,9 +3,9 @@ import argparse,json
 from pathlib import Path
 from core import load,save
 
-def refresh(project_path,profile_path=None):
+def _refresh_unlocked(project_path,profile_path=None):
     pp=Path(project_path);base=pp.parent;out={'media_calls':0,'issues':[]}
-    from asset_gallery import build as gallery
+    from asset_gallery import _build_unlocked as gallery
     from build_preview import build as preview
     try:out['assets']=gallery(pp)
     except Exception as exc:out['issues'].append({'object':'asset_gallery','result':'待复核','error':str(exc)})
@@ -22,6 +22,17 @@ def refresh(project_path,profile_path=None):
     out['asset_table']=p.get('deliverables',{}).get('asset_table')
     save(base/'99_工作区'/'面板刷新状态.json',out)
     return out
+
+def refresh_owned(project_path,profile_path=None):
+    """Delegate to ownership-aware publisher; never fall back to unsafe writes."""
+    try:
+        from init_project import refresh_owned as guarded_refresh
+        return guarded_refresh(project_path,profile_path)
+    except Exception as exc:
+        return {'media_calls':0,'execution_status':'未执行','issues':[{'object':'ownership_guard','result':'待复核','error_type':type(exc).__name__,'error':str(exc)}]}
+
+def refresh(project_path,profile_path=None):
+    return refresh_owned(project_path,profile_path)
 
 if __name__=='__main__':
     ap=argparse.ArgumentParser();ap.add_argument('project');ap.add_argument('--profile');a=ap.parse_args()

@@ -69,7 +69,27 @@ def audit(project,groups,stage='ready'):
                 elif entities.get(eid,{}).get('kind')=='person':
                     aid=es[eid].get('reference_asset_id')
                     if not aid or aid not in s.get('asset_ids',[]):fail('VISIBLE_REFERENCE',sid,eid+' 可见状态未绑定实际素材')
-            if any(e not in visible for e in s.get('camera_subjects',[])):fail('CAMERA_SUBJECT',sid,'镜头主体不在可见人物清单')
+            if any(e not in visible for e in s.get('camera_subjects',[])):fail('CAMERA_SUBJECT',sid,'镜头主体不在可见实体清单')
+            for eid in s.get('camera_subjects',[]):
+                if eid in es and entities.get(eid,{}).get('kind')!='person':
+                    aid=es[eid].get('reference_asset_id')
+                    if aid and aid not in s.get('asset_ids',[]):fail('CAMERA_REFERENCE',sid,eid+' 的已登记主体素材未用于本镜')
+        for fragment in s.get('speech',[]):
+            relation=fragment.get('camera_relation')
+            if relation not in (None,'onscreen','offscreen'):
+                fail('CAMERA_RELATION',sid,'声音和画面关系未定义')
+            if relation=='offscreen':
+                speaker=fragment.get('speaker')
+                visible=s.get('visible_entities',[])
+                if any(speaker==eid or speaker==entities.get(eid,{}).get('name') for eid in visible if entities.get(eid,{}).get('kind')=='person'):
+                    fail('CAMERA_RELATION',sid,'标注画外的说话人同时被列为本镜可见人物')
+            if relation=='onscreen':
+                speaker=fragment.get('speaker')
+                matches=[eid for eid,entity in entities.items() if entity.get('kind')=='person' and (speaker==eid or speaker==entity.get('name'))]
+                if len(matches)==1 and matches[0] not in s.get('visible_entities',[]):
+                    fail('CAMERA_RELATION',sid,'标注画内的说话人没有列为可见人物')
+            if fragment.get('continues_from_previous') is True and not (previous and any(p.get('id')==fragment.get('id') for p in previous.get('speech',[]))):
+                fail('SPEECH_CONTINUATION',sid,'标记跨镜连续的台词没有与上一镜相同的台词ID')
         for e in s.get('events',[])+s.get('entry_bridge',[]):
             if e.get('action') in ('board','alight'):
                 if e.get('door')!=DOORS.get(e.get('seat')) or not e.get('vehicle_id') or not e.get('entity_id'):

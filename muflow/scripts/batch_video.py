@@ -35,6 +35,14 @@ class Store:
             used=c.execute('SELECT COALESCE(SUM(units),0) FROM reservations').fetchone()[0]
             if used+units>limit:raise ValueError('Authorized budget exhausted; keep pending tasks')
             c.execute('INSERT INTO reservations VALUES (?,?)',(k,units))
+    def release_rejected(self,k,evidence):
+        if not evidence:raise ValueError('No-charge evidence required')
+        with self.db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            c.execute('UPDATE reservations SET units=0 WHERE id=?',(k,))
+            c.execute('CREATE TABLE IF NOT EXISTS billing_events (seq INTEGER PRIMARY KEY AUTOINCREMENT,event TEXT UNIQUE,attempt TEXT,kind TEXT,units INTEGER,evidence TEXT)')
+            event=digest({'attempt':k,'kind':'reported_charge','units':0,'evidence':evidence})
+            c.execute('INSERT OR IGNORE INTO billing_events(event,attempt,kind,units,evidence) VALUES (?,?,?,?,?)',(event,k,'reported_charge',0,evidence))
     def record_cost(self,k,amount):
         try:units=int(Decimal(str(amount))*1000000)
         except Exception:return
@@ -63,8 +71,9 @@ class Store:
 
 @contextlib.contextmanager
 def exclusive(path):
-    f=open(path,'a+b');f.seek(0);f.write(b'0');f.flush();f.seek(0)
+    f=open(path,'a+b')
     try:
+        f.seek(0)
         if os.name=='nt':
             import msvcrt;msvcrt.locking(f.fileno(),msvcrt.LK_NBLCK,1)
         else:
@@ -77,6 +86,16 @@ def exclusive(path):
         if os.name=='nt':msvcrt.locking(f.fileno(),msvcrt.LK_UNLCK,1)
         else:fcntl.flock(f.fileno(),fcntl.LOCK_UN)
         f.close()
+
+@contextlib.contextmanager
+def blocking_exclusive(path):
+    # Wait for another process to finish local bookkeeping; never resubmit media.
+    while True:
+        lock=exclusive(path)
+        try:lock.__enter__();break
+        except ValueError:time.sleep(0.05)
+    try:yield
+    finally:lock.__exit__(None,None,None)
 
 from media_integrity import download
 
@@ -103,8 +122,7 @@ def run(items,cfg,out,store,max_seconds=None,grant=None):
     from execution_gate import enforce
     local_test=cfg.get('video',{}).get('test_mode') is True and urllib.parse.urlsplit(cfg.get('contracts',{}).get('video',{}).get('url','')).hostname in ('127.0.0.1','localhost','::1') and all(it.get('schema_version',1)==1 for it in items)
     if not local_test:enforce(items,cfg,grant)
-    contract=video_contract_check(cfg,items);key=api_key(cfg);video=cfg['video'];cap=int(video['concurrency']);poll=float(video.get('poll_seconds',180))
-    if not 1<=cap<=int(video['verified_concurrency_limit']):raise ValueError('Concurrency outside verified limit')
+    contract=video_contract_check(cfg,items);key=api_key(cfg);video=cfg['video'];poll=float(video.get('poll_seconds',180))
     price=video.get('max_price_per_attempt_yuan')
     if not isinstance(price,(int,float)) or price<=0:raise ValueError('Positive verified price cap required')
     order=round_robin(items);seq={it['id']:i for i,it in enumerate(order)};byid={it['id']:it for it in items}
@@ -142,7 +160,15 @@ def run(items,cfg,out,store,max_seconds=None,grant=None):
                 save(out/(safe_name(jid)+f'_attempt{n}_request.json'),{'operation':'video','endpoint':contract['url'],'payload':payload,'asset_hashes':[x['sha256'] for x in it['images']]})
                 try:response=api_json(contract['url'],contract.get('method','POST'),payload,key,contract.get('timeout_seconds',240))
                 except Exception as e:
-                    d.update(phase='uncertain',error='POST result unknown: '+type(e).__name__);store.put(jid,fp,d);return
+                    from rate_limit import rejected_429
+                    rejection=rejected_429(e,contract,video.get('retry_seconds',30))
+                    if rejection:
+                        receipt=out/(safe_name(jid)+f'_attempt{n}_rejected_429.json');save(receipt,rejection)
+                        d['history'][-1].update(receipt=str(receipt),last_state='rejected_429',rejection=rejection)
+                        if rejection['confirmed_no_charge']:store.release_rejected(jid+':'+str(n),str(receipt))
+                        d.update(phase='retry',next_at=time.time()+rejection['retry_after_seconds'],error='Provider confirmed HTTP 429 rejected before task creation')
+                    else:d.update(phase='uncertain',error='POST result unknown: '+type(e).__name__)
+                    store.put(jid,fp,d);return
             elif phase in ('running','poll_result'):
                 url=contract['poll_url'].replace('{task_id}',urllib.parse.quote(str(d['task_id']),safe=''))
                 try:response=api_json(url,key=key,timeout=contract.get('poll_timeout_seconds',60))
@@ -186,34 +212,32 @@ def run(items,cfg,out,store,max_seconds=None,grant=None):
             else:d.update(phase='blocked',resume_phase=phase,error=str(e))
         store.put(jid,fp,d)
     def publish_preview():
-        from video_gallery import build_data,read_tasks
-        base=Path(store.path).resolve().parent
-        pp=base/'project.json'
-        project=load(pp) if pp.exists() else {'project_id':base.name,'groups':[{'id':x['id'],'episode':x['episode']} for x in items]}
-        tasks=read_tasks(base)
-        try:build_data(project,base,tasks)
+        # Preview updates share the ownership-checked publisher with image/stage updates.
+        from refresh_progress import refresh_owned
+        base=Path(store.path).resolve().parent;pp=base/'project.json'
+        if not pp.is_file():return
+        try:
+            result=refresh_owned(pp)
+            if result.get('issues'):save(out/'preview_update_error.json',{'result':'待复核','issues':result['issues'],'note':'任务与已下载文件保留；未覆盖无法确认归属的预览。'})
         except Exception as exc:save(out/'preview_update_error.json',{'result':'待复核','error_type':type(exc).__name__,'note':'Preview update failed; preserve task and downloaded files.'})
     last_preview=0
-    pool=cf.ThreadPoolExecutor(max_workers=cap+2);futures={}
+    pool=cf.ThreadPoolExecutor(max_workers=max(1,len(items)));futures={}
     try:
         while True:
             states={k:store.get(k) for k in byid}
             for fut,k in list(futures.items()):
                 if fut.done():fut.result();del futures[fut]
             states={k:store.get(k) for k in byid}
-            in_flight=set(futures.values());cloud=sum(d['phase'] in ('running','submitting','uncertain','poll_result') or (k in in_flight and d['phase'] in ('ready','retry')) for k,d in states.items())
+            in_flight=set(futures.values())
             candidates=sorted(byid,key=lambda k:(states[k]['attempts'],seq[k]))
             for k in candidates:
                 d=store.get(k)
                 if k in in_flight or d.get('next_at',0)>time.time():continue
                 p=d['phase']
                 if p in ('ready','retry'):
-                    if cloud>=cap:continue
                     if any(x.get('price_exceeded') for x in states.values()):
                         d.update(phase='blocked',resume_phase=p,error='Provider reported cost exceeds approved attempt cap');store.put(k,fps[k],d);continue
-                    cloud+=1
                 elif p not in ('running','poll_result','download'):continue
-                if len(futures)>=cap+2:break
                 # Mark ownership in futures before scheduling another cycle.
                 futures[pool.submit(step,k)]=k
             current={k:store.get(k) for k in byid}

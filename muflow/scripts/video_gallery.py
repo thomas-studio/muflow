@@ -112,4 +112,6 @@ def build_data(project,base,tasks):
 if __name__=='__main__':
     ap=argparse.ArgumentParser(description='更新已出成片预览，不生成、不上传、不检查视频内容')
     ap.add_argument('project');ap.add_argument('--summary');a=ap.parse_args()
-    print(json.dumps(build(a.project,summary=a.summary),ensure_ascii=False))
+    if a.summary is not None:ap.error('受保护刷新暂不支持--summary；请先将真实任务登记到项目台账')
+    from refresh_progress import refresh_owned
+    result=refresh_owned(a.project);print(json.dumps(result,ensure_ascii=False));raise SystemExit(1 if result.get('issues') else 0)

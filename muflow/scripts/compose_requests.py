@@ -239,6 +239,13 @@ def compose_group(project, g):
              '画面禁止文字与字幕。声音仅角色对白和必要物理音效，禁止背景音乐与环境氛围音。',
              '逐字执行台词；内心、电话及消息按已标声道，不改为现场发言。参考图中多角度展示属于同一身份，实际出镜人数按逐镜名单，不复制人物。',
              CASH_VISUAL_RULE]
+    if g.get('trim_tail_seconds') is not None:
+        trim = _decimal(g['trim_tail_seconds'])
+        basis = str(g.get('trim_tail_basis') or '依据未登记（待核）')
+        if trim < 0 or trim >= expected:
+            lines.append('可剪尾时长待核：不能为负或达到整组时长。')
+        else:
+            lines.append('剪辑标记：生成仍为' + _seconds(expected) + '秒；建议保留前' + _seconds(expected-trim) + '秒，尾部' + _seconds(trim) + '秒可人工裁剪；依据：' + basis + '。不靠延长对白或重复动作填充。')
     for text in (settings.get('visual_prefix'), g.get('directing_notes')):
         if text:
             lines.append(str(text))
@@ -287,6 +294,8 @@ def compose_group(project, g):
         subjects = shot.get('camera_subjects', [])
         lines.append('实际出镜：' + ('、'.join(readable.name(e) for e in visible) if visible else '无已登记人物，是否空镜待核')
                      + '；镜头主体：' + ('、'.join(readable.name(e) for e in subjects) if subjects else '未登记（待核）'))
+        if visible and not any(readable.entities.get(e, {}).get('kind') == 'person' for e in visible):
+            lines.append('画面说明：本镜无需人物入画，按已登记主体拍摄。')
         refs = [readable.reference(aid) for aid in shot.get('asset_ids', [])]
         if refs:
             lines.append('本镜使用参考：' + '、'.join(refs))
@@ -306,6 +315,10 @@ def compose_group(project, g):
                          + '｜' + _CHANNELS.get(channel, channel) + '｜'
                          + str(fragment.get('emotion') or '语气未登记（待核）') + '：“'
                          + str(fragment.get('text', '')) + '”')
+            if fragment.get('camera_relation') == 'offscreen':
+                lines.append('音画关系：画面不显示说话人；' + speaker + '的' + _CHANNELS.get(channel, channel) + '从画外传来，画中人物不代替发声或对口型。')
+            if fragment.get('continues_from_previous') is True:
+                lines.append('语句承接：这是' + speaker + '同一句台词的后续片段，紧接前镜声音，不重说已完成部分。')
         for effect in shot.get('sound_effects', []):
             if isinstance(effect, dict):
                 source = effect.get('physical_source') or '实际声源未登记（待核）'

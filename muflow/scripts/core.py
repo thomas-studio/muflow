@@ -10,7 +10,13 @@ def save(path, data):
     p=Path(path); p.parent.mkdir(parents=True, exist_ok=True)
     tmp=p.with_name(p.name+'.tmp-'+uuid.uuid4().hex)
     tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
-    os.replace(tmp,p)
+    # Windows readers may briefly hold the destination open; keep the same unique
+    # temporary file and atomic replace, and never swallow a persistent error.
+    for attempt in range(40):
+        try:os.replace(tmp,p);break
+        except PermissionError:
+            if os.name!='nt' or attempt==39:raise
+            time.sleep(0.05)
 
 def resolve(base, value):
     p=Path(value)

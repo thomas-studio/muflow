@@ -14,13 +14,15 @@ from build_preview import build as preview
 from execution_gate import record_delivery,snapshot,prepare
 from audit_project_network import audit,require_clean
 from setup_profile import pair
+from init_project import initialize
+from refresh_progress import refresh_owned
 
 class Delivery(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.base=Path(self.tmp.name);self.p,self.cfg=fixture(self.base,'http://127.0.0.1:1');upgrade(self.p,self.cfg,self.base)
         self.gallery=self.base/'03_资产图'/GALLERY
     def tearDown(self):
-        if self.base.resolve().parent!=Path(tempfile.gettempdir()).resolve():raise RuntimeError('Unexpected cleanup target')
+        if Path(self.tmp.name).resolve().parent!=Path(tempfile.gettempdir()).resolve():raise RuntimeError('Unexpected cleanup target')
         self.tmp.cleanup()
     def video_receipt(self):
         save(self.base/'project.json',self.p);preview(self.base/'project.json',self.base/'preview',self.base/'profile.json')
@@ -91,18 +93,30 @@ class Delivery(unittest.TestCase):
     def test_candidate_review_change_invalidates_older_gallery(self):
         self.p['assets'][0]['review']={'status':'不通过','evidence':'Actual changed assessment'}
         with self.assertRaises(ValueError):images_ready(self.p,self.base)
+    def owned_fixture(self):
+        original=self.base; base=original/'owned-project';base.mkdir()
+        source=base/'novel.txt';source.write_text('第1集\n原创离线测试。',encoding='utf-8')
+        init=initialize(base,source,'owned-delivery-test');self.assertEqual(init['status'],'complete',init)
+        meta=load(base/'project.json')['muflow_init_v240'];self.p['muflow_init_v240']=meta
+        save(base/'source.json',load(original/'source.json'));save(base/'project.json',self.p);save(base/'profile.json',self.cfg)
+        self.base=base;self.gallery=base/'03_资产图'/GALLERY
+        r=refresh_owned(base/'project.json');self.assertFalse(r['issues'],r)
     def test_saved_image_auto_registers_and_refreshes_progress_gallery(self):
+        self.owned_fixture()
         img=self.base/'fresh.png';Image.new('RGB',(64,36),'orange').save(img);result={'phase':'saved','output':str(img),'sha256':sha(img),'audit':{'operation':'image_generate','asset_id':'A1'}}
-        register_saved(self.base/'project.json','A1',result);p=load(self.base/'project.json');r=verify(p,self.base,self.gallery)
+        refreshed=register_saved(self.base/'project.json','A1',result);self.assertFalse(refreshed['issues'],refreshed)
+        p=load(self.base/'project.json');r=verify(p,self.base,self.gallery)
         self.assertTrue(p['iterations']);self.assertIn('A1',[x['asset_id'] for x in p['iterations']]);self.assertEqual(p['assets'][0]['sha256'],sha(img));self.assertEqual(r['manifest_digest'],digest(manifest(p,self.base)))
     def test_registration_resume_does_not_duplicate_or_reset_real_review(self):
         img=self.base/'fresh.png';Image.new('RGB',(64,36),'orange').save(img);result={'phase':'saved','output':str(img),'sha256':sha(img),'audit':{'operation':'image_generate','asset_id':'A1'}}
         register_saved(self.base/'project.json','A1',result);p=load(self.base/'project.json');p['assets'][0]['review']={'status':'通过','evidence':'Actual fixture review after generation'};save(self.base/'project.json',p);count=len(p['iterations'])
         register_saved(self.base/'project.json','A1',result);p=load(self.base/'project.json');self.assertEqual(len(p['iterations']),count);self.assertEqual(p['assets'][0]['review']['status'],'通过')
     def test_old_candidate_preserved_when_new_content_is_registered(self):
+        self.owned_fixture()
         old=Path(self.p['assets'][0]['local_path']);oldhash=sha(old);img=self.base/'fresh.png';Image.new('RGB',(64,36),'orange').save(img)
-        register_saved(self.base/'project.json','A1',{'phase':'saved','output':str(img),'sha256':sha(img),'audit':{'operation':'image_generate'}});p=load(self.base/'project.json')
-        self.assertEqual(sha(old),oldhash);self.assertTrue(any(v['sha256']==oldhash for v in p['iterations']));self.assertTrue(list((self.base/'99_工作区/图片历史').glob('*.png')))
+        refreshed=register_saved(self.base/'project.json','A1',{'phase':'saved','output':str(img),'sha256':sha(img),'audit':{'operation':'image_generate'}});self.assertFalse(refreshed['issues'],refreshed);p=load(self.base/'project.json')
+        self.assertEqual(sha(old),oldhash);self.assertTrue(any(v['sha256']==oldhash for v in p['iterations']));backups=list((self.base/'99_工作区/图片历史').glob('*.png'));self.assertTrue(backups);self.assertTrue(any(sha(v)==oldhash for v in backups))
+        verify(p,self.base,self.gallery)
     def test_rejected_test_versions_appear_with_reasons(self):
         a=self.p['assets'][0];self.p['iterations']=[{'id':'test-1','asset_id':'A1','kind':'image','local_path':a['local_path'],'sha256':a['sha256'],'label':'画风尝试','status':'智能体建议退回','reason':'样张画风不一致，待用户复核'}];save(self.base/'project.json',self.p);build(self.base/'project.json')
         doc=self.gallery.read_text(encoding='utf-8');self.assertIn('data-history-id="test-1"',doc);self.assertIn('画风不一致',doc)

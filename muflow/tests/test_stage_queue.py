@@ -100,10 +100,10 @@ class StageQueue(unittest.TestCase):
         b=self.finish(next_batch(self.pp));Path(b['artifacts'][0]['path']).write_text('修改后的内容',encoding='utf-8')
         r=next_batch(self.pp);self.assertEqual(r['action'],'blocked');old=load(self.base/QUEUE)['stages']['screenplay']['batches'][0]
         self.assertEqual(old['completion']['evidence'],'实际产物已保存并按集核对');self.assertEqual(old['status'],'blocked')
-    def test_image_batches_max_twenty_and_mother_completes_before_child(self):
+    def test_all_ready_images_and_mother_completes_before_child(self):
         for i in range(21):self.add_image('root'+str(i))
-        self.add_image('child','root0');r=self.finish_text_stages();self.assertEqual(len(r['asset_ids']),20);self.assertNotIn('child',r['asset_ids'])
-        self.image_outputs(r,review_parent=True);r2=next_batch(self.pp);self.assertEqual(set(r2['asset_ids']),{'root20','child'});self.assertLessEqual(len(r2['asset_ids']),20)
+        self.add_image('child','root0');r=self.finish_text_stages();self.assertEqual(len(r['asset_ids']),21);self.assertNotIn('child',r['asset_ids'])
+        self.image_outputs(r,review_parent=True);r2=next_batch(self.pp);self.assertEqual(set(r2['asset_ids']),{'child'})
         self.image_outputs(r2);final=next_batch(self.pp);self.assertEqual(final['action'],'awaiting_review');self.assertEqual(final['stage'],'asset_review');self.assertFalse(final['video_authorized']);self.assertFalse(final['generation_authorized'])
     def test_child_waits_for_actual_mother_review_not_just_saved_file(self):
         self.add_image('mother');self.add_image('child','mother');r=self.finish_text_stages();self.assertEqual(r['asset_ids'],['mother']);self.image_outputs(r)
